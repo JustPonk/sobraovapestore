@@ -156,6 +156,271 @@ $$;
 
 COMMENT ON FUNCTION public.map_dashboard_event_activity(text) IS 'Maps dashboard event names to the visitor activity categories used by visitors.last_activity_type.';
 
+CREATE OR REPLACE FUNCTION public.merge_favorites(
+  p_visitor_id uuid,
+  p_profile_id uuid DEFAULT NULL,
+  p_customer_id uuid DEFAULT NULL,
+  p_now timestamptz DEFAULT timezone('utc', now())
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_favorite record;
+  v_target_favorite_id uuid;
+BEGIN
+  IF p_visitor_id IS NULL THEN
+    RETURN;
+  END IF;
+
+  FOR v_favorite IN
+    SELECT *
+    FROM favorites
+    WHERE visitor_id = p_visitor_id
+      AND deleted_at IS NULL
+    ORDER BY created_at, id
+  LOOP
+    SELECT f.id
+    INTO v_target_favorite_id
+    FROM favorites f
+    WHERE f.deleted_at IS NULL
+      AND f.product_variant_id = v_favorite.product_variant_id
+      AND (
+        (p_profile_id IS NOT NULL AND f.profile_id = p_profile_id)
+        OR (p_customer_id IS NOT NULL AND f.customer_id = p_customer_id)
+      )
+    ORDER BY f.created_at DESC, f.id DESC
+    LIMIT 1;
+
+    IF v_target_favorite_id IS NOT NULL THEN
+      UPDATE favorites
+      SET deleted_at = p_now,
+          updated_at = p_now
+      WHERE id = v_favorite.id;
+    ELSE
+      UPDATE favorites
+      SET profile_id = COALESCE(profile_id, p_profile_id),
+          customer_id = COALESCE(customer_id, p_customer_id),
+          updated_at = p_now
+      WHERE id = v_favorite.id;
+    END IF;
+  END LOOP;
+END;
+$$;
+
+COMMENT ON FUNCTION public.merge_favorites(uuid, uuid, uuid, timestamptz) IS 'Merges visitor favorites into the target profile/customer without duplicating the same product_variant_id.';
+
+CREATE OR REPLACE FUNCTION public.merge_carts(
+  p_visitor_id uuid,
+  p_profile_id uuid DEFAULT NULL,
+  p_customer_id uuid DEFAULT NULL,
+  p_now timestamptz DEFAULT timezone('utc', now())
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_cart record;
+  v_target_cart_id uuid;
+BEGIN
+  IF p_visitor_id IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT c.id
+  INTO v_target_cart_id
+  FROM carts c
+  WHERE c.deleted_at IS NULL
+    AND c.status = 'active'
+    AND (
+      (p_profile_id IS NOT NULL AND c.profile_id = p_profile_id)
+      OR (p_customer_id IS NOT NULL AND c.customer_id = p_customer_id)
+    )
+  ORDER BY c.updated_at DESC, c.created_at DESC
+  LIMIT 1;
+
+  FOR v_cart IN
+    SELECT *
+    FROM carts
+    WHERE visitor_id = p_visitor_id
+      AND deleted_at IS NULL
+    ORDER BY created_at DESC, id DESC
+  LOOP
+    IF v_target_cart_id IS NULL THEN
+      UPDATE carts
+      SET profile_id = COALESCE(profile_id, p_profile_id),
+          customer_id = COALESCE(customer_id, p_customer_id),
+          updated_at = p_now
+      WHERE id = v_cart.id;
+
+      v_target_cart_id := v_cart.id;
+    ELSIF v_cart.id <> v_target_cart_id THEN
+      INSERT INTO cart_items (
+        cart_id, product_id, product_variant_id, quantity, unit_price, compare_at_price, discount_amount, metadata
+      )
+      SELECT
+        v_target_cart_id,
+        ci.product_id,
+        ci.product_variant_id,
+        ci.quantity,
+        ci.unit_price,
+        ci.compare_at_price,
+        ci.discount_amount,
+        ci.metadata
+      FROM cart_items ci
+      WHERE ci.cart_id = v_cart.id
+        AND ci.deleted_at IS NULL
+      ON CONFLICT (cart_id, product_variant_id) DO UPDATE SET
+        quantity = cart_items.quantity + EXCLUDED.quantity,
+        discount_amount = cart_items.discount_amount + EXCLUDED.discount_amount,
+        updated_at = p_now;
+
+      UPDATE carts
+      SET deleted_at = p_now,
+          updated_at = p_now,
+          metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+            'merged_into_cart_id', v_target_cart_id::text,
+            'merged_from_visitor_id', p_visitor_id::text
+          )
+      WHERE id = v_cart.id;
+    END IF;
+  END LOOP;
+
+  RETURN v_target_cart_id;
+END;
+$$;
+
+COMMENT ON FUNCTION public.merge_carts(uuid, uuid, uuid, timestamptz) IS 'Merges all visitor carts into a single active target cart, summing line quantities while keeping the current cart pricing snapshot behavior.';
+
+CREATE OR REPLACE FUNCTION public.merge_recently_viewed(
+  p_visitor_id uuid,
+  p_profile_id uuid DEFAULT NULL,
+  p_customer_id uuid DEFAULT NULL,
+  p_now timestamptz DEFAULT timezone('utc', now())
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_recent record;
+  v_target_recent_id uuid;
+BEGIN
+  IF p_visitor_id IS NULL THEN
+    RETURN;
+  END IF;
+
+  FOR v_recent IN
+    SELECT *
+    FROM recently_viewed
+    WHERE visitor_id = p_visitor_id
+      AND deleted_at IS NULL
+    ORDER BY viewed_at DESC, id DESC
+  LOOP
+    SELECT rv.id
+    INTO v_target_recent_id
+    FROM recently_viewed rv
+    WHERE rv.deleted_at IS NULL
+      AND rv.product_variant_id = v_recent.product_variant_id
+      AND (
+        (p_profile_id IS NOT NULL AND rv.profile_id = p_profile_id)
+        OR (p_customer_id IS NOT NULL AND rv.customer_id = p_customer_id)
+      )
+    ORDER BY rv.viewed_at DESC, rv.created_at DESC, rv.id DESC
+    LIMIT 1;
+
+    IF v_target_recent_id IS NOT NULL THEN
+      UPDATE recently_viewed
+      SET viewed_at = GREATEST(viewed_at, v_recent.viewed_at),
+          updated_at = p_now,
+          metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+            'merged_from_visitor_id', p_visitor_id::text
+          )
+      WHERE id = v_target_recent_id;
+
+      UPDATE recently_viewed
+      SET deleted_at = p_now,
+          updated_at = p_now,
+          metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+            'merged_into_recently_viewed_id', v_target_recent_id::text,
+            'merged_from_visitor_id', p_visitor_id::text
+          )
+      WHERE id = v_recent.id;
+    ELSE
+      UPDATE recently_viewed
+      SET profile_id = COALESCE(profile_id, p_profile_id),
+          customer_id = COALESCE(customer_id, p_customer_id),
+          updated_at = p_now
+      WHERE id = v_recent.id;
+    END IF;
+  END LOOP;
+END;
+$$;
+
+COMMENT ON FUNCTION public.merge_recently_viewed(uuid, uuid, uuid, timestamptz) IS 'Merges visitor recently-viewed rows into the target profile/customer while preserving the latest view timestamp and visitor audit trail.';
+
+CREATE OR REPLACE FUNCTION public.merge_newsletters(
+  p_visitor_id uuid,
+  p_profile_id uuid DEFAULT NULL,
+  p_customer_id uuid DEFAULT NULL,
+  p_now timestamptz DEFAULT timezone('utc', now())
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Reserved for future visitor-linked newsletter flows.
+  RETURN;
+END;
+$$;
+
+COMMENT ON FUNCTION public.merge_newsletters(uuid, uuid, uuid, timestamptz) IS 'Reserved extension point for future visitor-linked newsletter migration.';
+
+CREATE OR REPLACE FUNCTION public.merge_chatbot(
+  p_visitor_id uuid,
+  p_profile_id uuid DEFAULT NULL,
+  p_customer_id uuid DEFAULT NULL,
+  p_now timestamptz DEFAULT timezone('utc', now())
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Reserved for future visitor-linked chatbot conversation migration.
+  RETURN;
+END;
+$$;
+
+COMMENT ON FUNCTION public.merge_chatbot(uuid, uuid, uuid, timestamptz) IS 'Reserved extension point for future visitor-linked chatbot migration.';
+
+CREATE OR REPLACE FUNCTION public.merge_ai_recommendations(
+  p_visitor_id uuid,
+  p_profile_id uuid DEFAULT NULL,
+  p_customer_id uuid DEFAULT NULL,
+  p_now timestamptz DEFAULT timezone('utc', now())
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Reserved for future visitor-linked AI recommendation migration.
+  RETURN;
+END;
+$$;
+
+COMMENT ON FUNCTION public.merge_ai_recommendations(uuid, uuid, uuid, timestamptz) IS 'Reserved extension point for future visitor-linked AI recommendation migration.';
+
 CREATE OR REPLACE FUNCTION public.trg_sync_visitor_activity_from_carts()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -257,173 +522,46 @@ AS $$
 DECLARE
   v_visitor_id uuid;
   v_now timestamptz := timezone('utc', now());
-  v_cart record;
-  v_favorite record;
-  v_recent record;
-  v_target_cart_id uuid;
-  v_target_favorite_id uuid;
-  v_target_recent_id uuid;
 BEGIN
+  IF p_visitor_token IS NULL THEN
+    RAISE EXCEPTION 'visitor token is required';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended('visitor:' || p_visitor_token::text, 0));
+
+  IF p_profile_id IS NOT NULL THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended('profile:' || p_profile_id::text, 0));
+  END IF;
+
+  IF p_customer_id IS NOT NULL THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended('customer:' || p_customer_id::text, 0));
+  END IF;
+
   PERFORM set_config('app.visitor_migration', 'on', true);
 
   SELECT id INTO v_visitor_id
   FROM visitors
   WHERE visitor_token = p_visitor_token
     AND deleted_at IS NULL
-  LIMIT 1;
+  LIMIT 1
+  FOR UPDATE;
 
   IF v_visitor_id IS NULL THEN
     RAISE EXCEPTION 'visitor not found for token %', p_visitor_token;
   END IF;
 
   UPDATE visitors
-  SET last_seen_at = v_now,
+    SET last_seen_at = v_now,
+      last_activity_type = 'login',
       updated_at = v_now
   WHERE id = v_visitor_id;
 
-  -- Merge favorites without duplicates. Keep visitor_id on migrated rows for audit.
-  FOR v_favorite IN
-    SELECT *
-    FROM favorites
-    WHERE visitor_id = v_visitor_id
-      AND deleted_at IS NULL
-    ORDER BY created_at, id
-  LOOP
-    SELECT f.id
-    INTO v_target_favorite_id
-    FROM favorites f
-    WHERE f.deleted_at IS NULL
-      AND f.product_variant_id = v_favorite.product_variant_id
-      AND (
-        (p_profile_id IS NOT NULL AND f.profile_id = p_profile_id)
-        OR (p_customer_id IS NOT NULL AND f.customer_id = p_customer_id)
-      )
-    ORDER BY f.created_at DESC, f.id DESC
-    LIMIT 1;
-
-    IF v_target_favorite_id IS NOT NULL THEN
-      UPDATE favorites
-      SET deleted_at = v_now,
-          updated_at = v_now,
-          metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
-            'merged_into_favorite_id', v_target_favorite_id::text,
-            'merged_from_visitor_id', v_visitor_id::text
-          )
-      WHERE id = v_favorite.id;
-    ELSE
-      UPDATE favorites
-      SET profile_id = COALESCE(profile_id, p_profile_id),
-          customer_id = COALESCE(customer_id, p_customer_id),
-          updated_at = v_now
-      WHERE id = v_favorite.id;
-    END IF;
-  END LOOP;
-
-  -- Merge carts into a single active cart.
-  SELECT c.id
-  INTO v_target_cart_id
-  FROM carts c
-  WHERE c.deleted_at IS NULL
-    AND c.status = 'active'
-    AND (
-      (p_profile_id IS NOT NULL AND c.profile_id = p_profile_id)
-      OR (p_customer_id IS NOT NULL AND c.customer_id = p_customer_id)
-    )
-  ORDER BY c.updated_at DESC, c.created_at DESC
-  LIMIT 1;
-
-  FOR v_cart IN
-    SELECT *
-    FROM carts
-    WHERE visitor_id = v_visitor_id
-      AND deleted_at IS NULL
-    ORDER BY created_at DESC, id DESC
-  LOOP
-    IF v_target_cart_id IS NULL THEN
-      UPDATE carts
-      SET profile_id = COALESCE(profile_id, p_profile_id),
-          customer_id = COALESCE(customer_id, p_customer_id),
-          updated_at = v_now
-      WHERE id = v_cart.id;
-
-      v_target_cart_id := v_cart.id;
-    ELSIF v_cart.id <> v_target_cart_id THEN
-      INSERT INTO cart_items (
-        cart_id, product_id, product_variant_id, quantity, unit_price, compare_at_price, discount_amount, metadata
-      )
-      SELECT
-        v_target_cart_id,
-        ci.product_id,
-        ci.product_variant_id,
-        ci.quantity,
-        ci.unit_price,
-        ci.compare_at_price,
-        ci.discount_amount,
-        ci.metadata
-      FROM cart_items ci
-      WHERE ci.cart_id = v_cart.id
-        AND ci.deleted_at IS NULL
-      ON CONFLICT (cart_id, product_variant_id) DO UPDATE SET
-        quantity = cart_items.quantity + EXCLUDED.quantity,
-        discount_amount = cart_items.discount_amount + EXCLUDED.discount_amount,
-        updated_at = v_now;
-
-      UPDATE carts
-      SET deleted_at = v_now,
-          updated_at = v_now,
-          metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
-            'merged_into_cart_id', v_target_cart_id::text,
-            'merged_from_visitor_id', v_visitor_id::text
-          )
-      WHERE id = v_cart.id;
-    END IF;
-  END LOOP;
-
-  -- Merge recently viewed rows without changing historical views already attached to the profile/customer.
-  FOR v_recent IN
-    SELECT *
-    FROM recently_viewed
-    WHERE visitor_id = v_visitor_id
-      AND deleted_at IS NULL
-    ORDER BY viewed_at DESC, id DESC
-  LOOP
-    SELECT rv.id
-    INTO v_target_recent_id
-    FROM recently_viewed rv
-    WHERE rv.deleted_at IS NULL
-      AND rv.product_variant_id = v_recent.product_variant_id
-      AND (
-        (p_profile_id IS NOT NULL AND rv.profile_id = p_profile_id)
-        OR (p_customer_id IS NOT NULL AND rv.customer_id = p_customer_id)
-      )
-    ORDER BY rv.viewed_at DESC, rv.created_at DESC, rv.id DESC
-    LIMIT 1;
-
-    IF v_target_recent_id IS NOT NULL THEN
-      UPDATE recently_viewed
-      SET viewed_at = GREATEST(viewed_at, v_recent.viewed_at),
-          updated_at = v_now,
-          metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
-            'merged_from_visitor_id', v_visitor_id::text
-          )
-      WHERE id = v_target_recent_id;
-
-      UPDATE recently_viewed
-      SET deleted_at = v_now,
-          updated_at = v_now,
-          metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
-            'merged_into_recently_viewed_id', v_target_recent_id::text,
-            'merged_from_visitor_id', v_visitor_id::text
-          )
-      WHERE id = v_recent.id;
-    ELSE
-      UPDATE recently_viewed
-      SET profile_id = COALESCE(profile_id, p_profile_id),
-          customer_id = COALESCE(customer_id, p_customer_id),
-          updated_at = v_now
-      WHERE id = v_recent.id;
-    END IF;
-  END LOOP;
+  PERFORM public.merge_favorites(v_visitor_id, p_profile_id, p_customer_id, v_now);
+  PERFORM public.merge_carts(v_visitor_id, p_profile_id, p_customer_id, v_now);
+  PERFORM public.merge_recently_viewed(v_visitor_id, p_profile_id, p_customer_id, v_now);
+  PERFORM public.merge_newsletters(v_visitor_id, p_profile_id, p_customer_id, v_now);
+  PERFORM public.merge_chatbot(v_visitor_id, p_profile_id, p_customer_id, v_now);
+  PERFORM public.merge_ai_recommendations(v_visitor_id, p_profile_id, p_customer_id, v_now);
 END;
 $$;
 
@@ -500,6 +638,9 @@ ON recently_viewed(profile_id, product_variant_id)
 WHERE profile_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_recently_viewed_visitor_id ON recently_viewed(visitor_id);
+CREATE INDEX IF NOT EXISTS idx_recently_viewed_visitor_viewed_at ON recently_viewed(visitor_id, viewed_at DESC) WHERE visitor_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_recently_viewed_customer_viewed_at ON recently_viewed(customer_id, viewed_at DESC) WHERE customer_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_recently_viewed_profile_viewed_at ON recently_viewed(profile_id, viewed_at DESC) WHERE profile_id IS NOT NULL AND deleted_at IS NULL;
 
 ALTER TABLE public.dashboard_events
   ADD COLUMN IF NOT EXISTS visitor_id uuid;
@@ -521,6 +662,9 @@ ALTER TABLE public.dashboard_events
   CHECK (profile_id IS NOT NULL OR customer_id IS NOT NULL OR visitor_id IS NOT NULL OR anonymous_id IS NOT NULL);
 
 CREATE INDEX IF NOT EXISTS idx_dashboard_events_visitor_id ON dashboard_events(visitor_id);
+CREATE INDEX IF NOT EXISTS idx_dashboard_events_visitor_occurred_at ON dashboard_events(visitor_id, occurred_at DESC) WHERE visitor_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_dashboard_events_profile_occurred_at ON dashboard_events(profile_id, occurred_at DESC) WHERE profile_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_dashboard_events_customer_occurred_at ON dashboard_events(customer_id, occurred_at DESC) WHERE customer_id IS NOT NULL;
 
 CREATE TRIGGER carts_sync_visitor_activity
 AFTER INSERT OR UPDATE OF visitor_id ON carts

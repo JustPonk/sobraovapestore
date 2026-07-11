@@ -43,3 +43,26 @@ COMMENT ON TABLE activity_logs IS 'Human-readable timeline of user and system ac
 CREATE INDEX IF NOT EXISTS idx_activity_logs_actor_profile_id ON activity_logs(actor_profile_id);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_activity_type ON activity_logs(activity_type);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_occurred_at ON activity_logs(occurred_at DESC);
+
+CREATE OR REPLACE FUNCTION public.prevent_dashboard_event_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'dashboard_events are immutable';
+END;
+$$;
+
+COMMENT ON FUNCTION public.prevent_dashboard_event_mutation() IS 'Blocks updates and deletes on dashboard_events to preserve the analytics event stream.';
+
+DROP TRIGGER IF EXISTS dashboard_events_prevent_update ON public.dashboard_events;
+CREATE TRIGGER dashboard_events_prevent_update
+BEFORE UPDATE ON public.dashboard_events
+FOR EACH ROW
+EXECUTE FUNCTION public.prevent_dashboard_event_mutation();
+
+DROP TRIGGER IF EXISTS dashboard_events_prevent_delete ON public.dashboard_events;
+CREATE TRIGGER dashboard_events_prevent_delete
+BEFORE DELETE ON public.dashboard_events
+FOR EACH ROW
+EXECUTE FUNCTION public.prevent_dashboard_event_mutation();

@@ -6,10 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check": "next build"
   },
   "dependencies": {
     "next": "16.2.9",
+    "lucide-react": "^0.542.0",
+    "motion": "^12.23.24",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
