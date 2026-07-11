@@ -12,38 +12,38 @@ const heroHighlights = [
 ]
 
 export const heroContentLayout = {
-	// Contenedor principal del contenido del hero
-	// Ancho maximo: 1280px
-	// Altura minima: 640px mobile / 740px desktop
-	shell:
-		'relative z-20 mx-auto flex min-h-[640px] max-w-7xl flex-col justify-between px-3 pb-4 pt-16 sm:px-4 sm:pb-5 sm:pt-18 lg:min-h-[740px] lg:px-6 lg:pb-6 lg:pt-20',
-	// Bloque superior izquierdo
-	// Posicion: alineado a la izquierda y desplazado hacia abajo para quedar cerca del top visual
-	// Ancho maximo: 620px
-	contentBlock: 'mt-6 max-w-[620px] space-y-6 sm:mt-6 lg:mt-20',
-	// Contenedor del titulo y parrafo
-	textBlock: 'space-y-4 text-white',
-	// Titulo principal
-	// Ancho maximo: 560px
-	title: 'inline-block max-w-[560px] rounded-[10px] border border-white/10 bg-[#2B1F97] px-4 pb-1 pt-4 text-5xl uppercase leading-[0.84] tracking-[0.02em] text-white shadow-[0_24px_48px_rgba(43,31,151,0.3)] backdrop-blur-[3px] sm:px-5 sm:pt-5 sm:text-6xl lg:px-6 lg:text-[7.4rem]',
-	// Parrafo descriptivo
-	// Ancho maximo: 520px
-	paragraph: 'max-w-[520px] text-sm leading-6 text-white/88 sm:text-lg lg:text-xl',
-	// Fila de botones
-	buttonRow: 'flex flex-wrap gap-3 pt-5 sm:gap-4 sm:pt-12',
-	// Botones CTA
-	primaryButton:
-		'inline-flex min-w-[170px] items-center justify-center rounded-[10px] bg-[#DEDCFF] px-5 py-3 text-[1.35rem] uppercase leading-none !text-[#2B1F97] shadow-[0_14px_34px_rgba(255,255,255,0.14)] transition hover:-translate-y-0.5 sm:min-w-[198px] sm:px-7 sm:py-4 sm:text-[1.75rem] [font-family:var(--font-thunder)]',
-	secondaryButton:
-		'inline-flex min-w-[170px] items-center justify-center rounded-[10px] bg-[#2B1F97] px-5 py-3 text-[1.35rem] uppercase leading-none !text-[#DEDCFF] shadow-[0_18px_36px_rgba(43,31,151,0.4)] transition hover:-translate-y-0.5 hover:bg-[#3a2cb9] sm:min-w-[198px] sm:px-7 sm:py-4 sm:text-[1.75rem] [font-family:var(--font-thunder)]',
-	// Banda inferior de beneficios
-	// Distribucion: 1 columna mobile / 2 columnas tablet / 4 columnas desktop ancho
-	highlightsGrid: 'mt-auto grid grid-cols-1 gap-3 pt-4 text-white sm:grid-cols-2 sm:gap-4 lg:pt-6 xl:grid-cols-4',
-	highlightCard:
-		'flex items-center justify-center gap-3 rounded-[14px] px-3 py-3 backdrop-blur-[2px] sm:px-4 sm:py-4',
-	highlightIcon:
-		'inline-flex h-11 w-11 items-center justify-center rounded-[12px] border border-white/16 bg-white/10 text-white sm:h-12 sm:w-12',
-	highlightText: 'text-[1.05rem] uppercase leading-none text-[#DEDCFF] sm:text-[1.2rem] lg:text-[1.35rem] [font-family:var(--font-thunder)]',
+    // Contenedor principal del contenido del hero
+    // Ajustado: px-4 (móvil) -> sm:px-6 (tablet) -> lg:px-8 (desktop) para consistencia total
+    shell:
+        'relative z-20 mx-auto flex min-h-[640px] max-w-[92%] flex-col justify-between px-4 pb-4 pt-16 sm:px-6 sm:pb-5 sm:pt-18 lg:min-h-[740px] lg:px-8 lg:pb-6 lg:pt-20',
+    // Bloque superior izquierdo
+    contentBlock: 'mt-6 max-w-[620px] space-y-6 sm:mt-6 lg:mt-20',
+    
+    // Contenedor del titulo y parrafo
+    textBlock: 'space-y-4 text-white',
+    
+    // Titulo principal
+    title: 'inline-block max-w-[560px] rounded-[10px] border border-white/10 bg-[#2B1F97] px-4 pb-1 pt-4 text-5xl uppercase leading-[0.84] tracking-[0.02em] text-white shadow-[0_24px_48px_rgba(43,31,151,0.3)] backdrop-blur-[3px] sm:px-5 sm:pt-5 sm:text-6xl lg:px-6 lg:text-[7.4rem]',
+    
+    // Parrafo descriptivo
+    paragraph: 'max-w-[520px] text-sm leading-6 text-white/88 sm:text-lg lg:text-xl',
+    
+    // Fila de botones
+    buttonRow: 'flex flex-wrap gap-3 pt-5 sm:gap-4 sm:pt-12',
+    
+    // Botones CTA
+    primaryButton:
+        'inline-flex min-w-[170px] items-center justify-center rounded-[10px] bg-[#DEDCFF] px-5 py-3 text-[1.35rem] uppercase leading-none !text-[#2B1F97] shadow-[0_14px_34px_rgba(255,255,255,0.14)] transition hover:-translate-y-0.5 sm:min-w-[198px] sm:px-7 sm:py-4 sm:text-[1.75rem] [font-family:var(--font-thunder)]',
+    secondaryButton:
+        'inline-flex min-w-[170px] items-center justify-center rounded-[10px] bg-[#2B1F97] px-5 py-3 text-[1.35rem] uppercase leading-none !text-[#DEDCFF] shadow-[0_18px_36px_rgba(43,31,151,0.4)] transition hover:-translate-y-0.5 hover:bg-[#3a2cb9] sm:min-w-[198px] sm:px-7 sm:py-4 sm:text-[1.75rem] [font-family:var(--font-thunder)]',
+    
+    // Banda inferior de beneficios
+    highlightsGrid: 'grid grid-cols-1 gap-3 pt-4 text-white sm:grid-cols-2 sm:gap-4 lg:pt-6 xl:grid-cols-4',
+    highlightCard:
+        'flex items-center justify-center gap-3 rounded-[14px] px-3 py-3 backdrop-blur-[2px] sm:px-4 sm:py-4',
+    highlightIcon:
+        'inline-flex h-11 w-11 items-center justify-center rounded-[12px] border border-white/16 bg-white/10 text-white sm:h-12 sm:w-12',
+    highlightText: 'text-[1.05rem] uppercase leading-none text-[#DEDCFF] sm:text-[1.2rem] lg:text-[1.35rem] [font-family:var(--font-thunder)]',
 } as const
 
 export default function HeroContent() {
