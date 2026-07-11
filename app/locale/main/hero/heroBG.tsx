@@ -17,7 +17,8 @@ export default function HeroBG() {
 			<motion.div
 				animate={{ y: [0, -10, 0] }}
 				transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut' }}
-				className="absolute inset-0 z-10"
+				className="pointer-events-none absolute inset-0 z-10 select-none"
+				aria-hidden="true"
 			>
 				<Image
 					src="/itemhero.png"

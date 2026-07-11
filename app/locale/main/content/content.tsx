@@ -36,7 +36,11 @@ export default function Content() {
   }
 
   return (
-    <section id="shop" className="space-y-8 rounded-[2rem] bg-white px-1 py-2">
+    <section
+      id="shop"
+      className="space-y-8 rounded-[2rem] bg-white bg-[url('/bgContent.png')] bg-cover bg-center bg-no-repeat px-1 py-2 sm:px-2"
+    >
+      <div >
       <div id="promotions" className="flex flex-col items-center gap-2 text-center">
         <p className="text-[0.8rem] font-black uppercase tracking-[0.4em] text-[#1f2a9b]">
           Directo a las
@@ -97,6 +101,7 @@ export default function Content() {
         >
           Ver más
         </Link>
+      </div>
       </div>
     </section>
   )
