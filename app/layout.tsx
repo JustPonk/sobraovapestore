@@ -14,7 +14,7 @@ const satoshi = localFont({
 })
 
 const thunder = localFont({
-	src: './fonts/Thunder-BlackLC.ttf',
+	src: './fonts/Thunder-BoldLC.otf',
 	weight: '900',
 	style: 'normal',
 	variable: '--font-thunder',
