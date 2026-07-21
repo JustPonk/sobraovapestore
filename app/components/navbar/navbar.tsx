@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { Menu, ShoppingCart, User, X } from 'lucide-react'
 import GlassButton from '../glassButton/glassButton'
 import SearchBar, { SearchBarTrigger, useNavbarSearch } from './components/searchBar'
 import { navbarStyles } from './styles/navbarStyles'
 
 const simpleLinks = [
-	{ label: 'Tienda', href: '#tienda' },
+	{ label: 'Tienda', href: '/tienda' },
 	{ label: 'Nosotros', href: '#about' },
 ]
 
@@ -33,6 +34,15 @@ export default function Navbar() {
 
 	const userMenuRef = useRef<HTMLDivElement | null>(null)
 	const search = useNavbarSearch()
+	const pathname = usePathname()
+
+	// /tienda never has a hero behind the navbar, so the transparent-at-top
+	// look has nothing to sit on top of there — force the solid blue
+	// background on that route regardless of scroll position. `isScrolled`
+	// keeps driving the padding/logo-shrink animation as normal either way,
+	// so scrolling still feels the same on every page, including /tienda.
+	const isTiendaPage = pathname?.startsWith('/tienda') ?? false
+	const useSolidHeader = isScrolled || isTiendaPage
 
 	useEffect(() => {
 		const handleClickOutside = (event: MouseEvent) => {
@@ -85,7 +95,7 @@ export default function Navbar() {
 	return (
 		<header
 			className={`${navbarStyles.headerBase} ${
-				isScrolled ? navbarStyles.headerScrolled : navbarStyles.headerTop
+				useSolidHeader ? navbarStyles.headerScrolled : navbarStyles.headerTop
 			}`}
 		>
 			<div
@@ -115,7 +125,6 @@ export default function Navbar() {
 					mode="desktop"
 					isOpen={search.isDesktopOpen}
 					value={search.value}
-					isAnimating={search.isAnimating}
 					inputRef={search.inputRef}
 					wrapRef={search.wrapRef}
 					onOpen={search.openDesktop}
@@ -145,8 +154,8 @@ export default function Navbar() {
 						className={navbarStyles.iconButton}
 					/>
 
-					<GlassButton variant="default" href="#cart" className={navbarStyles.iconButton}>
-						<ShoppingCart className="h-5 w-5" />
+					<GlassButton variant="default" href="/carrito" className={navbarStyles.iconButton}>
+						<ShoppingCart className="h-5 w-5 text-white" />
 					</GlassButton>
 
 					{/* User menu: hidden on the smallest screens (folded into the
@@ -161,7 +170,7 @@ export default function Navbar() {
 							onClick={() => setIsUserOpen((current) => !current)}
 							className={navbarStyles.iconButton}
 						>
-							<User className="h-5 w-5" />
+							<User className="h-5 w-5 text-white" />
 						</GlassButton>
 
 						<div
@@ -196,7 +205,7 @@ export default function Navbar() {
 						onClick={openMobileMenu}
 						className={`${navbarStyles.iconButton} md:hidden`}
 					>
-						{isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+						{isMobileMenuOpen ? <X className="h-5 w-5 text-white" /> : <Menu className="h-5 w-5 text-white" />}
 					</GlassButton>
 				</div>
 			</div>
@@ -205,7 +214,6 @@ export default function Navbar() {
 				mode="mobile"
 				isOpen={search.isMobileOpen}
 				value={search.value}
-				isAnimating={search.isAnimating}
 				onOpen={search.openDesktop}
 				onValueChange={search.setValue}
 			/>

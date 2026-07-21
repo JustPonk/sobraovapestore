@@ -65,10 +65,10 @@ export default function HeroContent() {
 				</div>
 
 				<div className={heroContentLayout.buttonRow}>
-					<Link href="#shop" className={heroContentLayout.primaryButton}>
+					<Link href="/tienda" className={heroContentLayout.primaryButton}>
 						Encuentra tu vape
 					</Link>
-					<Link href="#promotions" className={heroContentLayout.secondaryButton}>
+					<Link href="/tienda?filter=promociones" className={heroContentLayout.secondaryButton}>
 						Comprar ahora
 					</Link>
 				</div>

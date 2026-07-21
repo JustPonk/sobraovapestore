@@ -1,1 +1,0 @@
-//this will contain the image of products, the name of the product and a button on center bottom of the card.

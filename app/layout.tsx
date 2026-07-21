@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import localFont from 'next/font/local'
+import FloatingActions from './components/floatingActions/floatingActions'
 import './globals.css'
 
 const satoshi = localFont({
@@ -33,7 +34,10 @@ export default function RootLayout({
 }) {
 	return (
 		<html lang="es" className={`${satoshi.variable} ${thunder.variable}`}>
-			<body className={satoshi.className}>{children}</body>
+			<body className={satoshi.className}>
+				{children}
+				<FloatingActions />
+			</body>
 		</html>
 	)
 }
