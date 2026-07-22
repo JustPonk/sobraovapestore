@@ -10,6 +10,9 @@ import {
 	storefrontSectionTitleWrapClass,
 } from '@/app/locale/store/storeStyles'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export const metadata: Metadata = {
 	title: 'Carrito | Sobrao Vape Store',
 	description: 'Resumen temporal del carrito de Sobrao Vape Store.',

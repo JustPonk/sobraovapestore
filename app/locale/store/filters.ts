@@ -13,3 +13,8 @@ export const storeFilters: Array<{
 ]
 
 export const defaultStoreFilter: StoreFilterKey = 'promociones'
+
+export function resolveActiveFilter(rawFilter: string | null | undefined): StoreFilterKey {
+	const matchingFilter = storeFilters.find((filter) => filter.key === rawFilter)
+	return matchingFilter?.key ?? defaultStoreFilter
+}

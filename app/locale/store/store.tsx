@@ -1,5 +1,6 @@
 import { getStoreProducts } from './data'
-import ProductGrid, { resolveActiveFilter } from './components/ProductGrid'
+import ProductGrid from './components/ProductGrid'
+import { resolveActiveFilter } from './filters'
 import { storefrontFrameClass } from './storeStyles'
 
 interface StoreProps {

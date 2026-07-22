@@ -4,6 +4,9 @@ import Footer from '@/app/components/footer/footer'
 import Navbar from '@/app/components/navbar/navbar'
 import Store from '@/app/locale/store/store'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export const metadata: Metadata = {
 	title: 'Tienda | Sobrao Vape Store',
 	description: 'Catálogo de productos, promociones y stock disponible de Sobrao Vape Store.',

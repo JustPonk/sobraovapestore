@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 
 import type { StoreFilterKey, StoreProduct } from '../data'
-import { defaultStoreFilter, storeFilters } from '../filters'
+import { storeFilters } from '../filters'
 import {
 	storefrontFrameClass,
 	storefrontSectionEyebrowClass,
@@ -17,13 +17,6 @@ interface ProductGridProps {
 	products: StoreProduct[]
 	activeFilter: StoreFilterKey
 }
-
-function resolveActiveFilter(rawFilter: string | null): StoreFilterKey {
-	const matchingFilter = storeFilters.find((filter) => filter.key === rawFilter)
-	return matchingFilter?.key ?? defaultStoreFilter
-}
-
-export { resolveActiveFilter }
 
 export default function ProductGrid({ products, activeFilter }: ProductGridProps) {
 	const activeFilterConfig = storeFilters.find((filter) => filter.key === activeFilter) ?? storeFilters[0]
