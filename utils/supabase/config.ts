@@ -6,12 +6,27 @@ function requireEnv(value: string | undefined, name: string): string {
 	return value
 }
 
-export const supabaseUrl = requireEnv(
-	process.env.NEXT_PUBLIC_SUPABASE_URL,
-	'NEXT_PUBLIC_SUPABASE_URL'
-)
+let cachedSupabaseUrl: string | undefined
+let cachedSupabasePublishableKey: string | undefined
 
-export const supabasePublishableKey = requireEnv(
-	process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-	'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'
-)
+export function getSupabaseUrl(): string {
+	if (!cachedSupabaseUrl) {
+		cachedSupabaseUrl = requireEnv(
+			process.env.NEXT_PUBLIC_SUPABASE_URL,
+			'NEXT_PUBLIC_SUPABASE_URL'
+		)
+	}
+
+	return cachedSupabaseUrl
+}
+
+export function getSupabasePublishableKey(): string {
+	if (!cachedSupabasePublishableKey) {
+		cachedSupabasePublishableKey = requireEnv(
+			process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+			'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'
+		)
+	}
+
+	return cachedSupabasePublishableKey
+}
