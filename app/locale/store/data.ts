@@ -20,6 +20,25 @@ export interface StorePromotion {
 	badgeLabel: string
 }
 
+interface StoreRawPromotion {
+	id: string
+	name: string
+	discount_type: 'percentage' | 'fixed'
+	discount_value: number
+	starts_at: string
+	ends_at: string
+	is_active: boolean
+}
+
+interface StoreRawCategory {
+	name: string
+	slug: string
+}
+
+interface StoreRawTag {
+	name: string
+}
+
 export interface StoreVariantSummary {
 	id: string
 	sku: string
@@ -53,7 +72,7 @@ interface StoreRawProduct {
 	name: string
 	slug: string
 	description: string | null
-	category: { name: string; slug: string } | null
+	category: StoreRawCategory | StoreRawCategory[] | null
 	variants: Array<{
 		id: string
 		sku: string
@@ -64,18 +83,18 @@ interface StoreRawProduct {
 		inventory: Array<{ quantity: number; reserved_quantity: number }>
 	}>
 	promotion_products: Array<{
-		promotion: {
-			id: string
-			name: string
-			discount_type: 'percentage' | 'fixed'
-			discount_value: number
-			starts_at: string
-			ends_at: string
-			is_active: boolean
-		} | null
+		promotion: StoreRawPromotion | StoreRawPromotion[] | null
 	}>
 	reviews: Array<{ rating: number; is_approved: boolean }>
-	tag_map: Array<{ tag: { name: string } | null }>
+	tag_map: Array<{ tag: StoreRawTag | StoreRawTag[] | null }>
+}
+
+function getSingleRelation<T>(relation: T | T[] | null | undefined) {
+	if (Array.isArray(relation)) {
+		return relation[0] ?? null
+	}
+
+	return relation ?? null
 }
 
 function slugifyText(value: string) {
@@ -140,8 +159,8 @@ function getActivePromotion(
 	const now = Date.now()
 
 	const activePromotions = promotions
-		.map((entry) => entry.promotion)
-		.filter((promotion): promotion is NonNullable<StoreRawProduct['promotion_products'][number]['promotion']> => {
+		.map((entry) => getSingleRelation(entry.promotion))
+		.filter((promotion): promotion is StoreRawPromotion => {
 			if (!promotion?.is_active) return false
 			const startsAt = new Date(promotion.starts_at).getTime()
 			const endsAt = new Date(promotion.ends_at).getTime()
@@ -263,23 +282,24 @@ export async function getStoreProducts() {
 	return rows
 		.map<StoreProduct | null>((product) => {
 			const variant = pickDisplayVariant(product.variants ?? [])
+			const category = getSingleRelation(product.category)
 
 			if (!variant) {
 				return null
 			}
 
 			const tagNames = (product.tag_map ?? [])
-				.map((entry) => entry.tag?.name?.trim())
+				.map((entry) => getSingleRelation(entry.tag)?.name?.trim())
 				.filter((tagName): tagName is string => Boolean(tagName))
 
 			const filterSlugs = [
-				...(product.category?.slug ? [slugifyText(product.category.slug)] : []),
+				...(category?.slug ? [slugifyText(category.slug)] : []),
 				...tagNames.map((tagName) => slugifyText(tagName)),
 			]
 
 			const promotion = getActivePromotion(product.promotion_products ?? [], variant.displayPrice)
 			const { rating, reviewCount } = getAverageRating(product.reviews ?? [])
-			const metaLabel = (tagNames[0] || product.category?.name || 'Catalogo').toUpperCase()
+			const metaLabel = (tagNames[0] || category?.name || 'Catalogo').toUpperCase()
 			const stockAvailable = variant.stockAvailable
 
 			return {
@@ -287,8 +307,8 @@ export async function getStoreProducts() {
 				name: product.name,
 				slug: product.slug,
 				description: product.description,
-				categoryName: product.category?.name ?? null,
-				categorySlug: product.category?.slug ?? null,
+				categoryName: category?.name ?? null,
+				categorySlug: category?.slug ?? null,
 				tagNames,
 				filterSlugs,
 				metaLabel,
