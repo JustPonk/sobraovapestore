@@ -1,12 +1,17 @@
 import { getStoreProducts } from './data'
-import ProductGrid from './components/ProductGrid'
+import ProductGrid, { resolveActiveFilter } from './components/ProductGrid'
 import { storefrontFrameClass } from './storeStyles'
 
-export default async function Store() {
+interface StoreProps {
+	activeFilterParam?: string | null
+}
+
+export default async function Store({ activeFilterParam }: StoreProps) {
 	try {
 		const products = await getStoreProducts()
+		const activeFilter = resolveActiveFilter(activeFilterParam ?? null)
 
-		return <ProductGrid products={products} />
+		return <ProductGrid products={products} activeFilter={activeFilter} />
 	} catch (error) {
 		return (
 			<section className={`${storefrontFrameClass} py-12 sm:py-16`}>

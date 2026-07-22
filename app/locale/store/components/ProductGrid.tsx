@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo } from 'react'
-import { useSearchParams } from 'next/navigation'
 
 import type { StoreFilterKey, StoreProduct } from '../data'
 import { defaultStoreFilter, storeFilters } from '../filters'
@@ -16,6 +15,7 @@ import ProductCard from './ProductCard'
 
 interface ProductGridProps {
 	products: StoreProduct[]
+	activeFilter: StoreFilterKey
 }
 
 function resolveActiveFilter(rawFilter: string | null): StoreFilterKey {
@@ -23,10 +23,9 @@ function resolveActiveFilter(rawFilter: string | null): StoreFilterKey {
 	return matchingFilter?.key ?? defaultStoreFilter
 }
 
-export default function ProductGrid({ products }: ProductGridProps) {
-	const searchParams = useSearchParams()
-	const activeFilter = resolveActiveFilter(searchParams.get('filter'))
+export { resolveActiveFilter }
 
+export default function ProductGrid({ products, activeFilter }: ProductGridProps) {
 	const activeFilterConfig = storeFilters.find((filter) => filter.key === activeFilter) ?? storeFilters[0]
 
 	const filteredProducts = useMemo(() => {

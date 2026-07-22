@@ -1,7 +1,7 @@
 'use client'
 
 import { Cigarette, HeartPulse, Sparkles, Star, Zap } from 'lucide-react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 
 import type { StoreFilterKey } from '../data'
 import { storeFilters } from '../filters'
@@ -21,10 +21,9 @@ interface FilterTabsProps {
 export default function FilterTabs({ activeFilter }: FilterTabsProps) {
 	const pathname = usePathname()
 	const router = useRouter()
-	const searchParams = useSearchParams()
 
 	const handleFilterChange = (filter: StoreFilterKey) => {
-		const params = new URLSearchParams(searchParams.toString())
+		const params = new URLSearchParams(window.location.search)
 		params.set('filter', filter)
 		router.replace(`${pathname}?${params.toString()}`, { scroll: false })
 	}

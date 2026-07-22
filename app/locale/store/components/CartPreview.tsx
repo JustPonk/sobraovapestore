@@ -2,7 +2,6 @@
 
 import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
 
 import { getStoredCart, type StoreCartItem } from '../cartStorage'
 
@@ -17,8 +16,11 @@ function formatPen(value: number) {
 		.replace('PEN', 'S/.')
 }
 
-export default function CartPreview() {
-	const searchParams = useSearchParams()
+interface CartPreviewProps {
+	showBuyNowMessage?: boolean
+}
+
+export default function CartPreview({ showBuyNowMessage = false }: CartPreviewProps) {
 	const [cartItems, setCartItems] = useState<StoreCartItem[]>([])
 
 	useEffect(() => {
@@ -39,7 +41,7 @@ export default function CartPreview() {
 
 	return (
 		<div className="space-y-6">
-			{searchParams.get('buyNow') ? (
+			{showBuyNowMessage ? (
 				<div className="rounded-[1.4rem] border border-[#7dd8ff]/60 bg-[#eef9ff] px-5 py-4 text-sm font-bold text-[#1f2a9b]">
 					El producto fue agregado y quedó listo para continuar con tu flujo de checkout.
 				</div>

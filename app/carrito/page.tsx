@@ -15,7 +15,14 @@ export const metadata: Metadata = {
 	description: 'Resumen temporal del carrito de Sobrao Vape Store.',
 }
 
-export default function CarritoPage() {
+interface CarritoPageProps {
+	searchParams?: Promise<{ buyNow?: string }>
+}
+
+export default async function CarritoPage({ searchParams }: CarritoPageProps) {
+	const resolvedSearchParams = await searchParams
+	const showBuyNowMessage = Boolean(resolvedSearchParams?.buyNow)
+
 	return (
 		<div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(143,104,255,0.16),transparent_28%),linear-gradient(180deg,#f9f8ff_0%,#f5f3ff_40%,#ffffff_100%)] text-slate-900">
 			<div className="fixed inset-x-0 top-0 z-[60]">
@@ -29,7 +36,7 @@ export default function CarritoPage() {
 						<h1 className={storefrontSectionTitleClass}>★ CARRITO ★</h1>
 					</div>
 
-					<CartPreview />
+					<CartPreview showBuyNowMessage={showBuyNowMessage} />
 				</section>
 			</main>
 
