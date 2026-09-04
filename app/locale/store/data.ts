@@ -65,6 +65,7 @@ export interface StoreProduct {
 	hasStock: boolean
 	promotion: StorePromotion | null
 	variant: StoreVariantSummary | null
+	createdAt: string | null
 }
 
 interface StoreRawProduct {
@@ -72,6 +73,7 @@ interface StoreRawProduct {
 	name: string
 	slug: string
 	description: string | null
+	created_at: string | null
 	category: StoreRawCategory | StoreRawCategory[] | null
 	variants: Array<{
 		id: string
@@ -252,6 +254,7 @@ export async function getStoreProducts() {
 				name,
 				slug,
 				description,
+				created_at,
 				category:categories(name, slug),
 				variants:product_variants(
 					id,
@@ -318,6 +321,7 @@ export async function getStoreProducts() {
 				hasStock: stockAvailable > 0,
 				promotion,
 				variant,
+				createdAt: product.created_at ?? null,
 			}
 		})
 		.filter((product): product is StoreProduct => Boolean(product))

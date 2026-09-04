@@ -23,8 +23,27 @@ export default function ProductGrid({ products, activeFilter }: ProductGridProps
 
 	const filteredProducts = useMemo(() => {
 		return products.filter((product) => {
+			// "Promociones" matches: explicit coupon active OR product belongs to the
+			// "Promociones" category (slug promociones) so admins can curate the
+			// landing without needing a promotion object.
 			if (activeFilter === 'promociones') {
-				return Boolean(product.promotion)
+				const hasPromotion = Boolean(product.promotion)
+				const inPromotionsCategory = product.categorySlug === 'promociones'
+				const hasPromotionInSlugs = product.filterSlugs.includes('promociones')
+				return hasPromotion || inPromotionsCategory || hasPromotionInSlugs
+			}
+
+			// "Nuevo" matches: category.slug nuevo OR created within the last 7 days.
+			if (activeFilter === 'nuevo') {
+				const inNuevoCategory =
+					product.categorySlug === 'nuevo' || product.filterSlugs.includes('nuevo')
+				let withinSevenDays = false
+				if (product.createdAt) {
+					const diff = Date.now() - new Date(product.createdAt).getTime()
+					withinSevenDays = Number.isFinite(diff) && diff >= 0 && diff <= 1000 * 60 * 60 * 24 * 7
+				}
+				if (inNuevoCategory || withinSevenDays) return true
+				return activeFilterConfig.matchers.some((matcher) => product.filterSlugs.includes(matcher))
 			}
 
 			return activeFilterConfig.matchers.some((matcher) => product.filterSlugs.includes(matcher))
