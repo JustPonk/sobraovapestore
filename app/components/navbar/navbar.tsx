@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Menu, ShoppingCart, User, X } from 'lucide-react'
 import GlassButton from '../glassButton/glassButton'
 import SearchBar, { SearchBarTrigger, useNavbarSearch } from './components/searchBar'
 import { navbarStyles } from './styles/navbarStyles'
+import { createClient as createBrowserClient } from '@/utils/supabase/client'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 const simpleLinks = [
 	{ label: 'Tienda', href: '/tienda' },
@@ -15,34 +17,87 @@ const simpleLinks = [
 ]
 
 const guestLinks = [
-	{ label: 'Login', href: '#login' },
-	{ label: 'Registrarse', href: '#register' },
+	{ label: 'Iniciar sesión', href: '/iniciar-sesion' },
+	{ label: 'Registrarse', href: '/registro' },
 ]
 
 const userLinks = [
-	{ label: 'Mis compras', href: '#orders' },
-	{ label: 'Beneficios', href: '#benefits' },
-	{ label: 'Log out', href: '#logout' },
+	{ label: 'Mis compras', href: '/mis-compras', disabled: true },
+	{ label: 'Beneficios', href: '/beneficios', disabled: true },
 ]
+
+type AccountLink = { label: string; href: string; disabled?: boolean; action?: 'signOut' }
 
 export default function Navbar() {
 	const [isUserOpen, setIsUserOpen] = useState(false)
-	const [isScrolled, setIsScrolled] = useState(false)
+	const [isScrolled, setIsScrolled] = useState<boolean>(false)
 	const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-	// TODO: wire this up to your real auth/session state (e.g. NextAuth).
-	const [isLoggedIn] = useState(false)
+	const [currentUser, setCurrentUser] = useState<SupabaseUser | null>(null)
+	const [, startTransition] = useTransition()
+	const router = useRouter()
 
 	const userMenuRef = useRef<HTMLDivElement | null>(null)
 	const search = useNavbarSearch()
 	const pathname = usePathname()
 
-	// /tienda never has a hero behind the navbar, so the transparent-at-top
-	// look has nothing to sit on top of there — force the solid blue
-	// background on that route regardless of scroll position. `isScrolled`
-	// keeps driving the padding/logo-shrink animation as normal either way,
-	// so scrolling still feels the same on every page, including /tienda.
-	const isTiendaPage = pathname?.startsWith('/tienda') ?? false
-	const useSolidHeader = isScrolled || isTiendaPage
+	useEffect(() => {
+		let cancelled = false
+		const sb = createBrowserClient()
+		sb.auth.getUser().then(({ data }) => {
+			if (cancelled) return
+			setCurrentUser(data.user ?? null)
+		})
+		const {
+			data: { subscription },
+		} = sb.auth.onAuthStateChange((_event, session) => {
+			setCurrentUser(session?.user ?? null)
+			startTransition(() => router.refresh())
+		})
+		return () => {
+			cancelled = true
+			subscription?.unsubscribe()
+		}
+	}, [router])
+
+	const isLoggedIn = Boolean(currentUser)
+	const accountDisplayName = (() => {
+		const md = currentUser?.user_metadata
+		const fullName = md?.full_name || md?.fullName || md?.name
+		if (typeof fullName === 'string' && fullName.trim()) return fullName.trim().split(/\s+/)[0]
+		const email = currentUser?.email
+		if (email) return email.split('@')[0]
+		return 'Mi cuenta'
+	})()
+
+	async function handleSignOut() {
+		const sb = createBrowserClient()
+		try {
+			await sb.auth.signOut()
+		} catch {
+			// no-op: onAuthStateChange limpia el estado
+		}
+		setIsUserOpen(false)
+		setIsMobileMenuOpen(false)
+		router.refresh()
+	}
+
+	const accountLinks: AccountLink[] = isLoggedIn
+		? [
+				{
+					label: `Hola, ${accountDisplayName}`,
+					href: '#account-header',
+					disabled: true,
+				},
+				...userLinks,
+				{ label: 'Cerrar sesión', href: '#logout', action: 'signOut' },
+		  ]
+		: guestLinks
+
+	// Only the main page (/) has the hero section directly behind the navbar.
+	// On every other route we lock the navbar into the compact solid-blue
+	// "scrolled" look — no transparency, no padding/logo-shrink animation.
+	const isHome = pathname === '/'
+	const useSolidHeader = !isHome || isScrolled
 
 	useEffect(() => {
 		const handleClickOutside = (event: MouseEvent) => {
@@ -68,6 +123,10 @@ export default function Navbar() {
 	}, [])
 
 	useEffect(() => {
+		if (!isHome) {
+			setIsScrolled(true)
+			return
+		}
 		const handleScroll = () => {
 			setIsScrolled(window.scrollY > 8)
 		}
@@ -78,7 +137,7 @@ export default function Navbar() {
 		return () => {
 			window.removeEventListener('scroll', handleScroll)
 		}
-	}, [])
+	}, [isHome])
 
 	const openMobileSearch = () => {
 		setIsMobileMenuOpen(false)
@@ -89,8 +148,6 @@ export default function Navbar() {
 		search.closeMobile()
 		setIsMobileMenuOpen((current) => !current)
 	}
-
-	const accountLinks = isLoggedIn ? userLinks : guestLinks
 
 	return (
 		<header
@@ -183,16 +240,34 @@ export default function Navbar() {
 							<span className="pointer-events-none absolute inset-[1px] rounded-[27px] border border-white/10" />
 							<span className="pointer-events-none absolute inset-x-6 top-[2px] h-8 rounded-full bg-white/18 blur-sm" />
 							<div className="relative z-10 flex flex-col gap-1">
-								{accountLinks.map((item) => (
-									<Link
-										key={item.label}
-										href={item.href}
-										onClick={() => setIsUserOpen(false)}
-										className={navbarStyles.dropdownLink}
-									>
-										{item.label}
-									</Link>
-								))}
+								{accountLinks.map((item) =>
+									item.action === 'signOut' ? (
+										<button
+											key={item.label}
+											type="button"
+											onClick={() => void handleSignOut()}
+											className={`${navbarStyles.dropdownLink} text-left text-rose-100/90 hover:bg-rose-500/20`}
+										>
+											{item.label}
+										</button>
+									) : item.disabled ? (
+										<span
+											key={item.label}
+											className={`${navbarStyles.dropdownLink} cursor-default text-white/70 hover:bg-transparent`}
+										>
+											{item.label}
+										</span>
+									) : (
+										<Link
+											key={item.label}
+											href={item.href}
+											onClick={() => setIsUserOpen(false)}
+											className={navbarStyles.dropdownLink}
+										>
+											{item.label}
+										</Link>
+									)
+								)}
 							</div>
 						</div>
 					</div>
@@ -234,16 +309,37 @@ export default function Navbar() {
 					))}
 
 					<span className={navbarStyles.mobileSectionLabel}>Cuenta</span>
-					{accountLinks.map((item) => (
-						<Link
-							key={item.label}
-							href={item.href}
-							onClick={() => setIsMobileMenuOpen(false)}
-							className={navbarStyles.mobileLink}
-						>
-							{item.label}
-						</Link>
-					))}
+					{accountLinks.map((item) =>
+						item.action === 'signOut' ? (
+							<button
+								key={item.label}
+								type="button"
+								onClick={() => {
+									setIsMobileMenuOpen(false)
+									void handleSignOut()
+								}}
+								className={`${navbarStyles.mobileLink} w-full text-left text-rose-800/90 hover:bg-rose-50`}
+							>
+								{item.label}
+							</button>
+						) : item.disabled ? (
+							<span
+								key={item.label}
+								className={`${navbarStyles.mobileLink} cursor-default text-slate-400`}
+							>
+								{item.label}
+							</span>
+						) : (
+							<Link
+								key={item.label}
+								href={item.href}
+								onClick={() => setIsMobileMenuOpen(false)}
+								className={navbarStyles.mobileLink}
+							>
+								{item.label}
+							</Link>
+						)
+					)}
 				</div>
 			)}
 		</header>

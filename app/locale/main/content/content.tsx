@@ -39,7 +39,7 @@ const placeholderPromotions: PromoCarouselItem[] = [
 export default function Content() {
 	return (
 		<div className="w-full overflow-x-hidden bg-cover bg-center bg-no-repeat">
-			<BrandsCarrusel />
+			
 			<PromotionsCarrusel items={placeholderPromotions} />
 			<ClientSection />
 			<SobraoMessage />

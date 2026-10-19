@@ -1,3 +1,5 @@
+'use client'
+
 import { Star, UserRound } from 'lucide-react'
 
 const frameClass = 'mx-auto w-full max-w-[1920px] px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10'

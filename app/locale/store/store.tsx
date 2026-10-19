@@ -1,4 +1,4 @@
-import { getStoreProducts } from './data'
+import { getStoreProducts, getStoreCombos } from './data'
 import ProductGrid from './components/ProductGrid'
 import { resolveActiveFilter } from './filters'
 import { storefrontFrameClass } from './storeStyles'
@@ -9,10 +9,10 @@ interface StoreProps {
 
 export default async function Store({ activeFilterParam }: StoreProps) {
 	try {
-		const products = await getStoreProducts()
+		const [products, combos] = await Promise.all([getStoreProducts(), getStoreCombos()])
 		const activeFilter = resolveActiveFilter(activeFilterParam ?? null)
 
-		return <ProductGrid products={products} activeFilter={activeFilter} />
+		return <ProductGrid products={products} combos={combos} activeFilter={activeFilter} />
 	} catch (error) {
 		return (
 			<section className={`${storefrontFrameClass} py-12 sm:py-16`}>
