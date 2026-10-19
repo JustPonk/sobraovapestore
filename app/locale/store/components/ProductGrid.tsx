@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 
-import type { StoreFilterKey, StoreProduct } from '../data'
+import type { StoreFilterKey, StoreProduct, StoreCombo } from '../data'
 import { storeFilters } from '../filters'
 import {
 	storefrontFrameClass,
@@ -12,43 +12,62 @@ import {
 } from '../storeStyles'
 import FilterTabs from './FilterTabs'
 import ProductCard from './ProductCard'
+import ComboCard from './ComboCard'
+
+type CatalogItem =
+	| { type: 'product'; data: StoreProduct }
+	| { type: 'combo'; data: StoreCombo }
 
 interface ProductGridProps {
 	products: StoreProduct[]
+	combos: StoreCombo[]
 	activeFilter: StoreFilterKey
 }
 
-export default function ProductGrid({ products, activeFilter }: ProductGridProps) {
+function matchFilter(item: CatalogItem, activeFilter: StoreFilterKey, matchers: string[]): boolean {
+	if (item.type === 'product') {
+		const product = item.data
+		if (activeFilter === 'promociones') {
+			const hasPromotion = Boolean(product.promotion)
+			const inPromotionsCategory = product.categorySlug === 'promociones'
+			const hasPromotionInSlugs = product.filterSlugs.includes('promociones')
+			return hasPromotion || inPromotionsCategory || hasPromotionInSlugs
+		}
+		if (activeFilter === 'nuevo') {
+			const inNuevoCategory =
+				product.categorySlug === 'nuevo' || product.filterSlugs.includes('nuevo')
+			let withinSevenDays = false
+			if (product.createdAt) {
+				const diff = Date.now() - new Date(product.createdAt).getTime()
+				withinSevenDays = Number.isFinite(diff) && diff >= 0 && diff <= 1000 * 60 * 60 * 24 * 7
+			}
+			if (inNuevoCategory || withinSevenDays) return true
+			return matchers.some((matcher) => product.filterSlugs.includes(matcher))
+		}
+		return matchers.some((matcher) => product.filterSlugs.includes(matcher))
+	}
+
+	// Combo: filtrar por categoría del combo
+	const combo = item.data
+	if (activeFilter === 'promociones') {
+		return combo.categorySlug === 'promociones' || combo.filterSlugs.includes('promociones')
+	}
+	if (activeFilter === 'nuevo') {
+		return combo.categorySlug === 'nuevo' || combo.filterSlugs.includes('nuevo')
+	}
+	return matchers.some((matcher) => combo.filterSlugs.includes(matcher))
+}
+
+export default function ProductGrid({ products, combos, activeFilter }: ProductGridProps) {
 	const activeFilterConfig = storeFilters.find((filter) => filter.key === activeFilter) ?? storeFilters[0]
 
-	const filteredProducts = useMemo(() => {
-		return products.filter((product) => {
-			// "Promociones" matches: explicit coupon active OR product belongs to the
-			// "Promociones" category (slug promociones) so admins can curate the
-			// landing without needing a promotion object.
-			if (activeFilter === 'promociones') {
-				const hasPromotion = Boolean(product.promotion)
-				const inPromotionsCategory = product.categorySlug === 'promociones'
-				const hasPromotionInSlugs = product.filterSlugs.includes('promociones')
-				return hasPromotion || inPromotionsCategory || hasPromotionInSlugs
-			}
-
-			// "Nuevo" matches: category.slug nuevo OR created within the last 7 days.
-			if (activeFilter === 'nuevo') {
-				const inNuevoCategory =
-					product.categorySlug === 'nuevo' || product.filterSlugs.includes('nuevo')
-				let withinSevenDays = false
-				if (product.createdAt) {
-					const diff = Date.now() - new Date(product.createdAt).getTime()
-					withinSevenDays = Number.isFinite(diff) && diff >= 0 && diff <= 1000 * 60 * 60 * 24 * 7
-				}
-				if (inNuevoCategory || withinSevenDays) return true
-				return activeFilterConfig.matchers.some((matcher) => product.filterSlugs.includes(matcher))
-			}
-
-			return activeFilterConfig.matchers.some((matcher) => product.filterSlugs.includes(matcher))
-		})
-	}, [activeFilter, activeFilterConfig.matchers, products])
+	const filteredItems = useMemo(() => {
+		const allItems: CatalogItem[] = [
+			...products.map<CatalogItem>((product) => ({ type: 'product', data: product })),
+			...combos.map<CatalogItem>((combo) => ({ type: 'combo', data: combo })),
+		]
+		return allItems.filter((item) => matchFilter(item, activeFilter, activeFilterConfig.matchers))
+	}, [activeFilter, activeFilterConfig.matchers, products, combos])
 
 	return (
 		<section className={`${storefrontFrameClass} space-y-8 py-10 sm:space-y-10 sm:py-14`}>
@@ -61,10 +80,16 @@ export default function ProductGrid({ products, activeFilter }: ProductGridProps
 				</h1>
 			</div>
 
-			{filteredProducts.length ? (
-				<div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-					{filteredProducts.map((product) => (
-						<ProductCard key={product.id} product={product} />
+			{filteredItems.length ? (
+				<div className="mx-auto grid w-full max-w-[80rem] grid-cols-1 gap-5 md:grid-cols-3 md:gap-6 justify-items-center">
+					{filteredItems.map((item) => (
+						<div key={`${item.type}-${item.data.id}`} className="w-full max-w-[24rem]">
+							{item.type === 'product' ? (
+								<ProductCard product={item.data} activeFilter={activeFilter} />
+							) : (
+								<ComboCard combo={item.data} />
+							)}
+						</div>
 					))}
 				</div>
 			) : (
