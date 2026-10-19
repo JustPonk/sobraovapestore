@@ -1,21 +1,18 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import Footer from '@/app/components/footer/footer'
 import Navbar from '@/app/components/navbar/navbar'
-import CartPreview from '@/app/locale/store/components/CartPreview'
-import {
-	storefrontFrameClass,
-	storefrontSectionEyebrowClass,
-	storefrontSectionTitleClass,
-	storefrontSectionTitleWrapClass,
-} from '@/app/locale/store/storeStyles'
+import CartView from '@/app/locale/store/components/CartView'
+import { storefrontFrameClass } from '@/app/locale/store/storeStyles'
+import { getCurrentCart } from '@/app/actions'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export const metadata: Metadata = {
 	title: 'Carrito | Sobrao Vape Store',
-	description: 'Resumen temporal del carrito de Sobrao Vape Store.',
+	description: 'Resumen del carrito de Sobrao Vape Store con totales server-side y stock en tiempo real.',
 }
 
 interface CarritoPageProps {
@@ -25,6 +22,7 @@ interface CarritoPageProps {
 export default async function CarritoPage({ searchParams }: CarritoPageProps) {
 	const resolvedSearchParams = await searchParams
 	const showBuyNowMessage = Boolean(resolvedSearchParams?.buyNow)
+	const initialCart = await getCurrentCart().catch(() => null)
 
 	return (
 		<div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(143,104,255,0.16),transparent_28%),linear-gradient(180deg,#f9f8ff_0%,#f5f3ff_40%,#ffffff_100%)] text-slate-900">
@@ -32,14 +30,34 @@ export default async function CarritoPage({ searchParams }: CarritoPageProps) {
 				<Navbar />
 			</div>
 
-			<main className="pt-28 sm:pt-32">
-				<section className={`${storefrontFrameClass} space-y-8 py-10 sm:space-y-10 sm:py-14`}>
-					<div className={storefrontSectionTitleWrapClass}>
-						<p className={storefrontSectionEyebrowClass}>Resumen de compra</p>
-						<h1 className={storefrontSectionTitleClass}>★ CARRITO ★</h1>
-					</div>
+			<main className="pt-24 sm:pt-28">
+				<section className={`${storefrontFrameClass} space-y-5 py-6 sm:space-y-6 sm:py-8`}>
+					<nav
+						aria-label="Breadcrumb"
+						className="flex items-center gap-2 text-[0.72rem] font-black uppercase tracking-[0.28em] text-slate-500"
+					>
+						<Link
+							href="/"
+							className="transition hover:text-[#1f2a9b]"
+						>
+							Inicio
+						</Link>
+						<span aria-hidden="true" className="text-[#1f2a9b]/50">
+							/
+						</span>
+						<Link
+							href="/tienda"
+							className="transition hover:text-[#1f2a9b]"
+						>
+							Tienda
+						</Link>
+						<span aria-hidden="true" className="text-[#1f2a9b]/50">
+							/
+						</span>
+						<span className="text-[#1f2a9b]">Carrito</span>
+					</nav>
 
-					<CartPreview showBuyNowMessage={showBuyNowMessage} />
+					<CartView showBuyNowMessage={showBuyNowMessage} initialCart={initialCart ?? null} />
 				</section>
 			</main>
 
