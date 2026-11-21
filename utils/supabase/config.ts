@@ -76,7 +76,7 @@ export interface UbigeoDraft {
 export const WAREHOUSE_ADDRESS: Readonly<UbigeoDraft & { label: string; address_line: string }> = {
 	label: 'Almacén Sobrao Vape',
 	address_line: 'Av. Principal',
-	department: 'Callao',
+	department: 'Lima',
 	province: 'Callao',
 	district: 'Ventanilla',
 }

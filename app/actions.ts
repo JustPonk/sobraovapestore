@@ -3,6 +3,7 @@
 import { cookies } from 'next/headers'
 
 import { logAudit } from '@/utils/audit/log'
+import { sendOrderEmails } from '@/utils/email/orderEmails'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import {
@@ -182,29 +183,40 @@ async function readVariantBatch(
 }
 
 function calcTotals(
-	lines: Array<{ variant_id: string; quantity: number; unit_price_from_db: number; price_includes_igv: boolean }>,
+	lines: Array<{
+		variant_id: string
+		quantity: number
+		unit_price_from_db: number
+		price_includes_igv: boolean
+		compare_at_price?: number | null
+	}>,
 	overrideShipping?: number | null | undefined
 ): CartTotals {
 	let subtotal = 0
 	let igvTotal = 0
+	let discountTotal = 0
 	for (const l of lines) {
 		const qty = Math.max(0, Number(l.quantity) || 0)
 		const unit = Number(l.unit_price_from_db) || 0
-		const lineGross = qty * unit
-		if (l.price_includes_igv) {
-			const sub = lineGross / 1.18
-			subtotal += sub
-			igvTotal += lineGross - sub
-		} else {
-			subtotal += lineGross
-			igvTotal += lineGross * 0.18
-		}
+		const compareAt = Number(l.compare_at_price)
+		// Base mostrada en la tienda: siempre con IGV.
+		const unitGross = l.price_includes_igv ? unit : unit * 1.18
+		const hasDiscount = Number.isFinite(compareAt) && compareAt > unit
+		const unitGrossBefore = hasDiscount
+			? l.price_includes_igv
+				? compareAt
+				: compareAt * 1.18
+			: unitGross
+		const lineBefore = unitGrossBefore * qty
+		subtotal += lineBefore / 1.18
+		igvTotal += lineBefore - lineBefore / 1.18
+		// El descuento es la diferencia entre el precio anterior y el actual de cada ítem.
+		discountTotal += lineBefore - unitGross * qty
 	}
-	const discountTotal = 0
 	const shippingTotal = Math.max(0, Number(overrideShipping) || 0)
 	return {
 		subtotal: Math.round(subtotal * 100) / 100,
-		discount_total: discountTotal,
+		discount_total: Math.round(discountTotal * 100) / 100,
 		igv_total: Math.round(igvTotal * 100) / 100,
 		shipping_total: shippingTotal,
 		total: Math.round((subtotal + igvTotal + shippingTotal - discountTotal) * 100) / 100,
@@ -376,6 +388,7 @@ async function loadCartLines(
 			quantity: l.quantity,
 			unit_price_from_db: l.unit_price,
 			price_includes_igv: Boolean(l.variant?.price_includes_igv),
+			compare_at_price: l.combo_id ? null : (l.variant?.compare_at_price ?? null),
 		})),
 		appliedShipping > 0 ? appliedShipping : null
 	)
@@ -794,6 +807,44 @@ export async function getYapeAccountSetting(): Promise<
 	}
 }
 
+export async function getSupportWhatsappSetting(): Promise<ActionState<string | null>> {
+	const admin = createAdminClient()
+	if (!admin) return { ok: false, message: 'No disponible.' }
+	const { data } = await admin.from('settings').select('key, value').eq('key', 'whatsapp_support').limit(1).maybeSingle()
+	const row = data as unknown as { key: string; value: unknown } | null
+	const raw = typeof row?.value === 'string' ? row.value : String(row?.value ?? '')
+	const digits = raw.replace(/\D/g, '')
+	return { ok: true, data: digits || null }
+}
+
+async function getTeamNotificationEmails(admin: ReturnType<typeof createAdminClient>): Promise<string[]> {
+	if (!admin) return []
+	try {
+		const { data } = await admin
+			.from('settings')
+			.select('key, value')
+			.eq('key', 'notification_emails')
+			.limit(1)
+			.maybeSingle()
+		const raw = (data as unknown as { value: unknown } | null)?.value
+		const list = Array.isArray(raw)
+			? raw
+			: typeof raw === 'string'
+				? (() => {
+						try {
+							const parsed = JSON.parse(raw)
+							return Array.isArray(parsed) ? parsed : []
+						} catch {
+							return []
+						}
+					})()
+				: []
+		return list.map((e) => String(e).trim()).filter(Boolean)
+	} catch {
+		return []
+	}
+}
+
 export interface PlaceOrderInput {
 	address_mode: 'existing' | 'new' | 'guest'
 	address_id?: string | null
@@ -888,8 +939,12 @@ export async function placeOrderWithYape(input: PlaceOrderInput): Promise<
 	const admin = createAdminClient()
 	if (!admin) return { ok: false, message: 'No disponible en este momento.' }
 
-	if (!input.terms_accepted) return { ok: false, message: 'Acepta los Términos y Condiciones para continuar.' }
-	if (!input.privacy_accepted) return { ok: false, message: 'Acepta la Política de Privacidad para continuar.' }
+	if (scope.mode === 'guest' && !input.terms_accepted) {
+		return { ok: false, message: 'Acepta los Términos y Condiciones para continuar.' }
+	}
+	if (scope.mode === 'guest' && !input.privacy_accepted) {
+		return { ok: false, message: 'Acepta la Política de Privacidad para continuar.' }
+	}
 	if (!isValidEmail(input.contact_email)) return { ok: false, message: 'Ingresa un correo electrónico válido.' }
 
 	const captchaCheck = await verifyCaptchaOrSkip(input.captcha_token ?? null, input.ip_address ?? null)
@@ -931,9 +986,15 @@ export async function placeOrderWithYape(input: PlaceOrderInput): Promise<
 	if (!cartId) return { ok: false, message: 'No existe un carrito para finalizar la compra.' }
 	const rawItems = (await admin
 		.from('cart_items')
-		.select('id, cart_id, variant_id, quantity, unit_price')
+		.select('id, cart_id, variant_id, quantity, unit_price, combo_id')
 		.eq('cart_id', cartId)) as unknown as {
-		data: Array<{ id: string; variant_id: string; quantity: number; unit_price: number }> | null
+		data: Array<{
+			id: string
+			variant_id: string
+			quantity: number
+			unit_price: number
+			combo_id?: string | null
+		}> | null
 	}
 	const items = rawItems.data ?? []
 	if (!items.length) return { ok: false, message: 'Tu carrito está vacío.' }
@@ -945,6 +1006,7 @@ export async function placeOrderWithYape(input: PlaceOrderInput): Promise<
 		quantity: number
 		price: number
 		price_includes_igv: boolean
+		compare_at_price?: number | null
 		product_id: string
 		product_name: string
 		sku: string
@@ -975,6 +1037,7 @@ export async function placeOrderWithYape(input: PlaceOrderInput): Promise<
 			quantity: it.quantity,
 			price: finalPrice,
 			price_includes_igv: v.price_includes_igv,
+			compare_at_price: it.combo_id ? null : v.compare_at_price,
 			product_id: v.product_id,
 			product_name: v.product_name,
 			sku: v.sku,
@@ -1006,6 +1069,7 @@ export async function placeOrderWithYape(input: PlaceOrderInput): Promise<
 			quantity: l.quantity,
 			unit_price_from_db: l.price,
 			price_includes_igv: l.price_includes_igv,
+			compare_at_price: l.compare_at_price ?? null,
 		}))
 	)
 
@@ -1407,6 +1471,49 @@ export async function placeOrderWithYape(input: PlaceOrderInput): Promise<
 			console.warn('[placeOrderWithYape] STEP 6 (admin notif) best-effort skipped:', notifErr instanceof Error ? notifErr.message : String(notifErr))
 		}
 		console.log(`[placeOrderWithYape] STEP 6 (admin notif) END`)
+
+		console.log(`[placeOrderWithYape] STEP 7 (emails) BEGIN`)
+		try {
+			const teamEmails = await getTeamNotificationEmails(admin)
+			await sendOrderEmails({
+				orderNumber: createdOrder.order_number,
+				total: createdOrder.total,
+				currency: createdOrder.currency,
+				contactEmail,
+				recipientName: contactSnapshot?.recipient_name ?? null,
+				phone: contactSnapshot?.recipient_phone ?? null,
+				addressLine: addressSnapshot || null,
+				reference: contactSnapshot?.reference ?? null,
+				items: linesReady.map((l) => ({
+					name: String(l.product_name),
+					sku: String(l.sku),
+					quantity: l.quantity,
+					lineTotal: Math.round(l.price * l.quantity * 100) / 100,
+				})),
+				teamEmails,
+			})
+		} catch (mailErr) {
+			console.warn(
+				'[placeOrderWithYape] STEP 7 (emails) best-effort skipped:',
+				mailErr instanceof Error ? mailErr.message : String(mailErr)
+			)
+		}
+		console.log(`[placeOrderWithYape] STEP 7 (emails) END`)
+
+		console.log(`[placeOrderWithYape] STEP 8 (vaciar carrito) BEGIN; cartId=${cartId}`)
+		try {
+			await admin.from('cart_items').delete().eq('cart_id', cartId)
+			await admin
+				.from('carts')
+				.update({ shipping_draft: null, shipping_total_applied: 0, updated_at: new Date().toISOString() })
+				.eq('id', cartId)
+		} catch (clearErr) {
+			console.warn(
+				'[placeOrderWithYape] STEP 8 (vaciar carrito) best-effort skipped:',
+				clearErr instanceof Error ? clearErr.message : String(clearErr)
+			)
+		}
+		console.log(`[placeOrderWithYape] STEP 8 (vaciar carrito) END`)
 	} catch (e) {
 		console.error(
 			'[placeOrderWithYape] CAUGHT THROW (will ROLLBACK):',

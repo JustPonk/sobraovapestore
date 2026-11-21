@@ -2,32 +2,36 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 
 import { formatPEN } from '@/utils/format'
+import { clearStoredCart } from '@/app/locale/store/cartStorage'
+import PurchaseSteps from '@/app/components/purchaseSteps/purchaseSteps'
 import { createClient as createBrowserClient } from '@/utils/supabase/client'
 import {
 	MAX_ADDRESSES_PER_USER,
 	getRecaptchaSiteKey,
 } from '@/utils/supabase/config'
+import { PERU_DEPARTMENTS, getPeruDistricts, getPeruProvinces } from '@/utils/ubigeo/peru'
 import {
 	createAddress,
 	deleteAddress,
 	getCurrentCart,
 	listUserAddressesServer,
 	placeOrderWithYape,
-	submitPaymentProof,
 	type ActionState,
 	type CartPayload,
 	type PlaceOrderInput,
 } from '@/app/actions'
 
-type Step = 'address' | 'confirm' | 'yape' | 'success'
+type Step = 'address' | 'confirm' | 'yape'
 
 interface Props {
 	initialCart: CartPayload
 	initialAddresses: Array<Record<string, unknown>>
 	initialYapeAccount: { phone: string; holder_name: string; qr_image_url: string } | null
+	initialWhatsapp: string | null
+	accountEmail: string | null
 }
 
 interface UserAddress {
@@ -139,15 +143,11 @@ const CheckoutCartSummary: React.FC<{ cart: CartPayload }> = ({ cart }) => {
 			<div className="mt-4 space-y-2 text-sm sm:text-base">
 				<div className="flex items-center justify-between gap-4">
 					<span className="font-bold text-slate-600">Subtotal</span>
-					<span className="font-bold text-slate-900">{formatPEN(totals.subtotal)}</span>
+					<span className="font-bold text-slate-900">{formatPEN(totals.subtotal + totals.igv_total)}</span>
 				</div>
 				<div className="flex items-center justify-between gap-4">
 					<span className="font-bold text-slate-600">Descuento</span>
 					<span className="font-bold text-slate-900">{formatPEN(totals.discount_total)}</span>
-				</div>
-				<div className="flex items-center justify-between gap-4">
-					<span className="font-bold text-slate-600">IGV (18%)</span>
-					<span className="font-bold text-slate-900">{formatPEN(totals.igv_total)}</span>
 				</div>
 				<div className="flex items-center justify-between gap-4">
 					<span className="font-bold text-slate-600">Envío</span>
@@ -164,12 +164,11 @@ const CheckoutCartSummary: React.FC<{ cart: CartPayload }> = ({ cart }) => {
 }
 
 const StepIndicator: React.FC<{ step: Step }> = ({ step }) => {
-	const order: Array<Step> = ['address', 'confirm', 'yape', 'success']
+	const order: Array<Step> = ['address', 'confirm', 'yape']
 	const labels: Record<Step, string> = {
 		address: 'Dirección',
 		confirm: 'Confirmar',
 		yape: 'Pago Yape',
-		success: 'Recibido',
 	}
 	const activeIdx = order.indexOf(step)
 	return (
@@ -210,9 +209,10 @@ const LabeledField: React.FC<{
 	label: string
 	required?: boolean
 	children: React.ReactNode
-}> = ({ label, required, children }) => (
+	labelClassName?: string
+}> = ({ label, required, children, labelClassName }) => (
 	<label className="block space-y-1.5">
-		<span className="block text-xs font-black uppercase tracking-[0.22em] text-slate-600">
+		<span className={`block text-xs font-black uppercase tracking-[0.22em] text-slate-600 ${labelClassName ?? ''}`}>
 			{label} {required ? <span className="text-rose-500">*</span> : null}
 		</span>
 		{children}
@@ -221,6 +221,8 @@ const LabeledField: React.FC<{
 
 const fieldClass =
 	'w-full rounded-[1rem] border border-indigo-100 bg-white/95 px-4 py-3 text-sm font-semibold text-slate-900 outline-none ring-0 transition focus:border-[#1f2a9b] focus:shadow-[0_0_0_4px_rgba(31,42,155,0.12)]'
+
+const selectClass = `${fieldClass} disabled:cursor-not-allowed disabled:bg-indigo-50/60 disabled:text-slate-400`
 
 function useRecaptchaReady(): { ready: boolean; execute: (action: string) => Promise<string | null> } {
 	const [ready, setReady] = useState<boolean>(typeof window !== 'undefined' && !!window.grecaptcha)
@@ -262,7 +264,7 @@ function useRecaptchaReady(): { ready: boolean; execute: (action: string) => Pro
 	return { ready, execute }
 }
 
-export default function CheckoutFlow({ initialCart, initialAddresses, initialYapeAccount }: Props) {
+export default function CheckoutFlow({ initialCart, initialAddresses, initialYapeAccount, initialWhatsapp, accountEmail }: Props) {
 	const [step, setStep] = useState<Step>('address')
 	const [cart, setCart] = useState<CartPayload>(initialCart)
 	const [addresses, setAddresses] = useState<UserAddress[]>(
@@ -280,13 +282,16 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 		province: '',
 		district: '',
 		line1: '',
-		line2: '',
-		zip: '',
 		reference: '',
 	})
-	const [notes, setNotes] = useState('')
+	const provinceOptions = useMemo(() => getPeruProvinces(newAddress.department), [newAddress.department])
+	const districtOptions = useMemo(
+		() => getPeruDistricts(newAddress.department, newAddress.province),
+		[newAddress.department, newAddress.province]
+	)
 	const [termsAccepted, setTermsAccepted] = useState(false)
 	const [privacyAccepted, setPrivacyAccepted] = useState(false)
+	const isAuthenticated = Boolean(accountEmail)
 
 	const [placeState, setPlaceState] = useState<
 		| ActionState<{
@@ -342,11 +347,6 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 	)
 	const placeError = useMemo(() => (placeState && !placeState.ok ? placeState.message : null), [placeState])
 
-	const [providerReference, setProviderReference] = useState('')
-	const [proofFile, setProofFile] = useState<File | null>(null)
-	const [proofPreview, setProofPreview] = useState<string | null>(null)
-	const [proofStatus, setProofStatus] = useState<'idle' | 'uploading' | 'submitting' | 'error' | 'ok'>('idle')
-	const [proofError, setProofError] = useState<string | null>(null)
 	const [successRefreshed, setSuccessRefreshed] = useState(false)
 
 	const [postSignupState, setPostSignupState] = useState<{
@@ -361,7 +361,6 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 	const [addressBanner, setAddressBanner] = useState<{ tone: 'error' | 'ok'; text: string } | null>(null)
 	const [saveAddressOnConfirm, setSaveAddressOnConfirm] = useState(true)
 
-	const fileInputRef = useRef<HTMLInputElement | null>(null)
 	const [, startTransition] = useTransition()
 
 	useEffect(() => {
@@ -399,13 +398,15 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 		if (addressMode === 'existing' && selectedAddressId) {
 			const a = addresses.find((x) => x.id === selectedAddressId)
 			if (a?.['email' as keyof UserAddress]) return String(a['email' as keyof UserAddress])
+			// Las direcciones guardadas no almacenan correo: usamos el de la cuenta.
+			return accountEmail ?? ''
 		}
 		return newAddress.email
-	}, [addressMode, selectedAddressId, addresses, newAddress.email])
+	}, [addressMode, selectedAddressId, addresses, newAddress.email, accountEmail])
 
 	const canGoConfirm = useMemo(() => {
 		if (cart.lines.length === 0) return false
-		if (!termsAccepted || !privacyAccepted) return false
+		if (!isAuthenticated && (!termsAccepted || !privacyAccepted)) return false
 		const email = effectiveEmail.trim()
 		if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false
 		if (addressMode === 'existing') return Boolean(selectedAddressId)
@@ -417,7 +418,7 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 				newAddress.district.trim() &&
 				newAddress.line1.trim()
 		)
-	}, [cart.lines.length, termsAccepted, privacyAccepted, effectiveEmail, addressMode, selectedAddressId, newAddress])
+	}, [cart.lines.length, termsAccepted, privacyAccepted, isAuthenticated, effectiveEmail, addressMode, selectedAddressId, newAddress])
 
 	const userHasAddresses = addresses.length > 0
 	const hitAddressLimit = addresses.length >= MAX_ADDRESSES_PER_USER
@@ -469,10 +470,9 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 		const base: PlaceOrderInput = {
 			address_mode: addressMode,
 			address_id: addressMode === 'existing' ? selectedAddressId : null,
-			notes: notes.trim() || null,
 			contact_email,
-			terms_accepted: termsAccepted,
-			privacy_accepted: privacyAccepted,
+			terms_accepted: isAuthenticated || termsAccepted,
+			privacy_accepted: isAuthenticated || privacyAccepted,
 			ip_address: ip,
 			user_agent: ua,
 			captcha_token: null,
@@ -485,74 +485,10 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 				province: newAddress.province.trim(),
 				district: newAddress.district.trim(),
 				line1: newAddress.line1.trim(),
-				line2: newAddress.line2.trim() || null,
-				zip: newAddress.zip.trim() || null,
 				reference: newAddress.reference.trim() || null,
 			}
 		}
 		return base
-	}
-
-	const onProofPick = (file: File | null) => {
-		setProofFile(file)
-		setProofError(null)
-		if (!file) {
-			setProofPreview(null)
-			return
-		}
-		const reader = new FileReader()
-		reader.onload = (e) => setProofPreview(e.target?.result ? String(e.target.result) : null)
-		reader.readAsDataURL(file)
-	}
-
-	const onSubmitProof = async () => {
-		if (!placed) return
-		if (!proofFile) {
-			setProofError('Adjunta la captura del comprobante Yape.')
-			return
-		}
-		if (!providerReference.trim()) {
-			setProofError('Ingresa el número de operación que te dio Yape.')
-			return
-		}
-		setProofStatus('uploading')
-		setProofError(null)
-		try {
-			const fd = new FormData()
-			fd.append('file', proofFile)
-			fd.append('payment_id', placed.payment_id)
-			fd.append('order_id', placed.order_id)
-			const upRes = await fetch('/api/storage/payment-proof', {
-				method: 'POST',
-				body: fd,
-			}).then((r) => r.json() as Promise<ActionState<{ payment_id: string; order_id: string; proof_url: string }>>)
-			if (!upRes.ok) {
-				setProofError(upRes.message || 'No se pudo guardar el comprobante.')
-				setProofStatus('error')
-				return
-			}
-			setProofStatus('submitting')
-			const { ip, ua } = await readIpAndUa()
-			const captchaToken = RECAPTCHA_SITE_KEY ? await executeCaptcha('yape_proof') : null
-			const submit = await submitPaymentProof(
-				placed.payment_id,
-				placed.order_id,
-				providerReference.trim(),
-				upRes.data?.proof_url ?? '',
-				{ captcha_token: captchaToken, ip_address: ip }
-			)
-			void ua
-			if (!submit.ok) {
-				setProofError(submit.message || 'No se pudo registrar el comprobante.')
-				setProofStatus('error')
-				return
-			}
-			setProofStatus('ok')
-			setStep('success')
-		} catch (e) {
-			setProofError(e instanceof Error ? e.message : 'Error inesperado.')
-			setProofStatus('error')
-		}
 	}
 
 	const handleCreateAccount = async () => {
@@ -602,11 +538,15 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 
 	return (
 		<div className="mx-auto w-full max-w-[1440px] px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10">
+			<div className="mx-auto mb-6 w-full max-w-[1280px]">
+				<PurchaseSteps current={step === 'yape' ? 'completada' : 'recojo'} />
+			</div>
+
 			<div className="mx-auto grid max-w-[720px] lg:hidden lg:max-w-none">
 				<StepIndicator step={step} />
 			</div>
 
-			{cart.lines.length === 0 && step !== 'success' ? (
+			{cart.lines.length === 0 && step !== 'yape' ? (
 				<div className="rounded-[1.8rem] border border-white/70 bg-white/75 p-6 text-center shadow-[0_18px_40px_rgba(31,42,155,0.08)]">
 					<p className="text-xs font-black uppercase tracking-[0.24em] text-[#1f2a9b]">Sin productos para procesar</p>
 					<p className="mt-3 text-sm font-semibold leading-7 text-slate-700 sm:text-base">
@@ -622,60 +562,56 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 			) : null}
 
 			{step === 'address' && cart.lines.length > 0 ? (
-				<div className="mt-6 grid w-full grid-cols-1 gap-6 lg:grid-cols-12">
-					<div className="space-y-6 lg:col-span-7">
+				<div className="mx-auto mt-6 grid w-full max-w-[1280px] grid-cols-1 gap-6 lg:grid-cols-12">
+					<div className="lg:col-span-7">
 					<section className="rounded-[1.6rem] border border-white/70 bg-white/85 p-5 shadow-[0_18px_40px_rgba(31,42,155,0.1)] sm:p-7">
 						<p className="text-xs font-black uppercase tracking-[0.3em] text-[#1f2a9b]">Paso 1 · Datos de contacto y entrega</p>
 
-						<div className="mt-4 flex flex-wrap gap-2">
+						<div className="mt-4 flex flex-wrap items-center gap-2">
 							{userHasAddresses ? (
-								<button
-									type="button"
-									onClick={() => setAddressMode('existing')}
-									className={`rounded-full px-3.5 py-1.5 text-[0.68rem] font-black uppercase tracking-[0.16em] transition ${
-										addressMode === 'existing'
-											? 'bg-[#1f2a9b] text-white shadow-[0_14px_30px_rgba(31,42,155,0.25)]'
-											: 'bg-indigo-50 text-slate-700 hover:bg-indigo-100'
-									}`}
-								>
-									Mis direcciones ({addresses.length}/{MAX_ADDRESSES_PER_USER})
-								</button>
-							) : null}
-							<button
-								type="button"
-								disabled={hitAddressLimit}
-								onClick={() => setAddressMode('new')}
-								title={
-									hitAddressLimit
-										? `Solo puedes tener ${MAX_ADDRESSES_PER_USER} direcciones guardadas. Elimina una antes.`
-										: undefined
-								}
-								className={`rounded-full px-3.5 py-1.5 text-[0.68rem] font-black uppercase tracking-[0.16em] transition ${
-									addressMode === 'new'
-										? 'bg-[#1f2a9b] text-white shadow-[0_14px_30px_rgba(31,42,155,0.25)]'
-										: hitAddressLimit
-										? 'cursor-not-allowed bg-slate-100 text-slate-400'
-										: 'bg-indigo-50 text-slate-700 hover:bg-indigo-100'
-								}`}
-							>
-								Nueva dirección
-							</button>
+								<>
+									<button
+										type="button"
+										onClick={() => setAddressMode('existing')}
+										className={`rounded-full px-3 py-1 text-[0.6rem] font-black uppercase tracking-[0.16em] transition ${
+											addressMode === 'existing'
+												? 'bg-[#1f2a9b] text-white shadow-[0_14px_30px_rgba(31,42,155,0.25)]'
+												: 'bg-indigo-50 text-slate-700 hover:bg-indigo-100'
+										}`}
+									>
+										Mis direcciones ({addresses.length}/{MAX_ADDRESSES_PER_USER})
+									</button>
+									<button
+										type="button"
+										disabled={hitAddressLimit}
+										onClick={() => setAddressMode('new')}
+										aria-label="Agregar otra dirección"
+										title={
+											hitAddressLimit
+												? `Solo puedes tener ${MAX_ADDRESSES_PER_USER} direcciones guardadas. Elimina una antes.`
+												: 'Agregar otra dirección'
+										}
+										className={`grid h-7 w-7 place-items-center rounded-full text-base font-black leading-none transition ${
+											addressMode === 'new'
+												? 'bg-[#1f2a9b] text-white shadow-[0_14px_30px_rgba(31,42,155,0.25)]'
+												: hitAddressLimit
+												? 'cursor-not-allowed bg-slate-100 text-slate-400'
+												: 'bg-indigo-50 text-slate-700 hover:bg-indigo-100'
+										}`}
+									>
+										+
+									</button>
+								</>
+							) : (
+								<span className="text-[0.6rem] font-black uppercase tracking-[0.22em] text-slate-500">
+									Nueva dirección
+								</span>
+							)}
 							{hitAddressLimit ? (
 								<p className="w-full text-[0.74rem] font-black uppercase tracking-[0.2em] text-amber-700">
 									· Llegaste al límite de {MAX_ADDRESSES_PER_USER} direcciones guardadas. Elimina una en "Mis direcciones" para agregar otra, o continúa sin guardar.
 								</p>
 							) : null}
-							<button
-								type="button"
-								onClick={() => setAddressMode('guest')}
-								className={`rounded-full px-3.5 py-1.5 text-[0.68rem] font-black uppercase tracking-[0.16em] transition ${
-									addressMode === 'guest'
-										? 'bg-[#1f2a9b] text-white shadow-[0_14px_30px_rgba(31,42,155,0.25)]'
-										: 'bg-indigo-50 text-slate-700 hover:bg-indigo-100'
-								}`}
-							>
-								Comprar como invitado
-							</button>
 						</div>
 
 						<div className="mt-5 space-y-5">
@@ -742,39 +678,17 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 
 							{addressMode === 'new' || addressMode === 'guest' ? (
 								<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-									<LabeledField label="Tu correo para el estado del pedido" required>
-										<div className="space-y-2">
-											<input
-												type="email"
-												value={newAddress.email}
-												onChange={(e) => setNewAddress({ ...newAddress, email: e.target.value })}
-												className={fieldClass}
-												placeholder="tu.correo@ejemplo.com"
-												autoComplete="email"
-											/>
-											<ul className="rounded-[1rem] bg-indigo-50/60 px-4 py-3 text-xs font-bold leading-6 text-slate-700 sm:text-[0.82rem]">
-												<li>✉️ Enviamos aquí las alertas cuando:</li>
-												<li>· tu pago Yape se aprueba / se rechaza</li>
-												<li>· tu pedido sale para reparto</li>
-												<li>· tu pedido fue entregado</li>
-											</ul>
-											<p className="text-[0.72rem] font-bold uppercase tracking-[0.18em] text-slate-500">
-												🤫 Nunca enviamos spam ni compartimos tus datos.
-											</p>
-										</div>
-									</LabeledField>
-									<div className="sm:col-span-2" />
-									<LabeledField label="Nombre completo de quien recibe" required>
+									<LabeledField label="Tu correo para el estado del pedido" required labelClassName="min-h-[2rem]">
 										<input
-											type="text"
-											value={newAddress.full_name}
-											onChange={(e) => setNewAddress({ ...newAddress, full_name: e.target.value })}
+											type="email"
+											value={newAddress.email}
+											onChange={(e) => setNewAddress({ ...newAddress, email: e.target.value })}
 											className={fieldClass}
-											placeholder="Ej. Luis Mendoza"
-											autoComplete="name"
+											placeholder="tu.correo@ejemplo.com"
+											autoComplete="email"
 										/>
 									</LabeledField>
-									<LabeledField label="Teléfono móvil" required>
+									<LabeledField label="Teléfono móvil" required labelClassName="min-h-[2rem]">
 										<input
 											type="tel"
 											value={newAddress.phone}
@@ -784,42 +698,68 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 											autoComplete="tel"
 										/>
 									</LabeledField>
-									<LabeledField label="Departamento" required>
-										<input
-											type="text"
-											value={newAddress.department}
-											onChange={(e) => setNewAddress({ ...newAddress, department: e.target.value })}
-											className={fieldClass}
-											placeholder="Ej. Lima"
-										/>
-									</LabeledField>
-									<LabeledField label="Provincia" required>
-										<input
-											type="text"
-											value={newAddress.province}
-											onChange={(e) => setNewAddress({ ...newAddress, province: e.target.value })}
-											className={fieldClass}
-											placeholder="Ej. Lima"
-										/>
-									</LabeledField>
-									<LabeledField label="Distrito" required>
-										<input
-											type="text"
-											value={newAddress.district}
-											onChange={(e) => setNewAddress({ ...newAddress, district: e.target.value })}
-											className={fieldClass}
-											placeholder="Ej. Miraflores"
-										/>
-									</LabeledField>
-									<LabeledField label="Código postal (opcional)">
-										<input
-											type="text"
-											value={newAddress.zip}
-											onChange={(e) => setNewAddress({ ...newAddress, zip: e.target.value })}
-											className={fieldClass}
-											placeholder="Ej. 15074"
-										/>
-									</LabeledField>
+									<div className="sm:col-span-2">
+										<LabeledField label="Nombre completo de quien recibe" required>
+											<input
+												type="text"
+												value={newAddress.full_name}
+												onChange={(e) => setNewAddress({ ...newAddress, full_name: e.target.value })}
+												className={fieldClass}
+												placeholder="Ej. Luis Mendoza"
+												autoComplete="name"
+											/>
+										</LabeledField>
+									</div>
+									<div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-3">
+										<LabeledField label="Departamento" required>
+											<select
+												value={newAddress.department}
+												onChange={(e) =>
+													setNewAddress({ ...newAddress, department: e.target.value, province: '', district: '' })
+												}
+												className={selectClass}
+											>
+												<option value="">Elige departamento</option>
+												{PERU_DEPARTMENTS.map((department) => (
+													<option key={department} value={department}>
+														{department}
+													</option>
+												))}
+											</select>
+										</LabeledField>
+										<LabeledField label="Provincia" required>
+											<select
+												value={newAddress.province}
+												disabled={!newAddress.department}
+												onChange={(e) =>
+													setNewAddress({ ...newAddress, province: e.target.value, district: '' })
+												}
+												className={selectClass}
+											>
+												<option value="">Elige provincia</option>
+												{provinceOptions.map((province) => (
+													<option key={province} value={province}>
+														{province}
+													</option>
+												))}
+											</select>
+										</LabeledField>
+										<LabeledField label="Distrito" required>
+											<select
+												value={newAddress.district}
+												disabled={!newAddress.province}
+												onChange={(e) => setNewAddress({ ...newAddress, district: e.target.value })}
+												className={selectClass}
+											>
+												<option value="">Elige distrito</option>
+												{districtOptions.map((district) => (
+													<option key={district} value={district}>
+														{district}
+													</option>
+												))}
+											</select>
+										</LabeledField>
+									</div>
 									<div className="sm:col-span-2">
 										<LabeledField label="Dirección (calle / número / lote / etc)" required>
 											<input
@@ -833,18 +773,7 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 										</LabeledField>
 									</div>
 									<div className="sm:col-span-2">
-										<LabeledField label="Complemento (interior / manzana / etc · opcional)">
-											<input
-												type="text"
-												value={newAddress.line2}
-												onChange={(e) => setNewAddress({ ...newAddress, line2: e.target.value })}
-												className={fieldClass}
-												placeholder="Ej. Interior 8, Mz K Lote 14"
-											/>
-										</LabeledField>
-									</div>
-									<div className="sm:col-span-2">
-										<LabeledField label="Referencia para el delivery (opcional)">
+										<LabeledField label="Notas o referencias para el delivery">
 											<textarea
 												value={newAddress.reference}
 												onChange={(e) => setNewAddress({ ...newAddress, reference: e.target.value })}
@@ -863,16 +792,9 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 													disabled={hitAddressLimit}
 													onChange={(e) => setSaveAddressOnConfirm(e.target.checked)}
 												/>
-												<div className="min-w-0 text-xs font-bold leading-6 text-slate-700 sm:text-sm">
-													<p className="font-black uppercase tracking-[0.2em] text-[#1f2a9b]">
-														Guardar dirección en mi cuenta
-													</p>
-													<p className="mt-1 text-[0.78rem] text-slate-600 sm:text-[0.82rem]">
-														{hitAddressLimit
-															? `Ya tienes ${MAX_ADDRESSES_PER_USER} direcciones guardadas (máximo permitido). Elimina una para volver a habilitar esta opción — igual podrás continuar sin guardar.`
-															: `Puedes tener hasta ${MAX_ADDRESSES_PER_USER} direcciones guardadas. El resto de campos los reutilizaremos en tu próxima compra.`}
-													</p>
-												</div>
+												<p className="min-w-0 text-xs font-black uppercase leading-6 tracking-[0.2em] text-[#1f2a9b] sm:text-sm">
+													Guardar dirección en mi cuenta
+												</p>
 											</label>
 										</div>
 									) : null}
@@ -881,29 +803,11 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 						</div>
 					</section>
 
-					<section className="rounded-[1.6rem] border border-white/70 bg-white/85 p-5 shadow-[0_18px_40px_rgba(31,42,155,0.1)] sm:p-7">
-						<LabeledField label="Notas para tu pedido (opcional)">
-							<textarea
-								value={notes}
-								onChange={(e) => setNotes(e.target.value)}
-								className={`${fieldClass} min-h-[80px] resize-y`}
-								placeholder="Ej. sin bolsa por favor / dejar en portería"
-							/>
-						</LabeledField>
-					</section>
-
-					</div>
-
-					<aside className="lg:sticky lg:top-32 lg:col-span-5 lg:h-fit space-y-6">
-						<CheckoutCartSummary cart={cart} />
-					</aside>
-
-					<div className="space-y-6 lg:col-span-7">
-					<section className="rounded-[1.6rem] border border-white/70 bg-white/85 p-5 shadow-[0_18px_40px_rgba(31,42,155,0.1)] sm:p-7 space-y-3">
-						<label className="flex cursor-pointer items-start gap-3 rounded-[1rem] px-3 py-3 hover:bg-indigo-50/60">
+					{!isAuthenticated ? <section className="mt-3 space-y-1 rounded-[1.6rem] border border-white/70 bg-white/85 px-4 py-4 shadow-[0_18px_40px_rgba(31,42,155,0.1)] sm:px-5 sm:py-5">
+						<label className="flex cursor-pointer items-center gap-3 rounded-[1rem] px-2 py-2 hover:bg-indigo-50/60">
 							<input
 								type="checkbox"
-								className="mt-0.5 h-5 w-5 shrink-0 accent-[#1f2a9b]"
+								className="h-5 w-5 shrink-0 accent-[#1f2a9b]"
 								checked={termsAccepted}
 								onChange={(e) => setTermsAccepted(e.target.checked)}
 							/>
@@ -920,10 +824,10 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 								(políticas de envío, cambios, devoluciones y pago rechazado).
 							</span>
 						</label>
-						<label className="flex cursor-pointer items-start gap-3 rounded-[1rem] px-3 py-3 hover:bg-indigo-50/60">
+						<label className="flex cursor-pointer items-center gap-3 rounded-[1rem] px-2 py-2 hover:bg-indigo-50/60">
 							<input
 								type="checkbox"
-								className="mt-0.5 h-5 w-5 shrink-0 accent-[#1f2a9b]"
+								className="h-5 w-5 shrink-0 accent-[#1f2a9b]"
 								checked={privacyAccepted}
 								onChange={(e) => setPrivacyAccepted(e.target.checked)}
 							/>
@@ -945,11 +849,11 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 								Ambos consentimientos son obligatorios para finalizar la compra.
 							</p>
 						)}
-					</section>
+					</section> : null}
 
 					{addressBanner ? (
 						<div
-							className={`rounded-[1.2rem] border px-4 py-3 text-xs font-black uppercase tracking-[0.2em] ${
+							className={`mt-3 rounded-[1.2rem] border px-4 py-3 text-xs font-black uppercase tracking-[0.2em] ${
 								addressBanner.tone === 'error'
 									? 'border-rose-200 bg-rose-50 text-rose-800'
 									: 'border-emerald-200 bg-emerald-50 text-emerald-800'
@@ -958,95 +862,96 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 							{addressBanner.text}
 						</div>
 					) : null}
-
-					<button
-						type="button"
-						disabled={!canGoConfirm || placePending || addressServerBusy}
-						onClick={async () => {
-							if (
-								addressMode === 'new' &&
-								saveAddressOnConfirm &&
-								!hitAddressLimit
-							) {
-								setAddressServerBusy(true)
-								setAddressBanner(null)
-								try {
-									const res = await createAddress({
-										recipient_name: newAddress.full_name.trim(),
-										recipient_phone: newAddress.phone.trim(),
-										address_line: `${newAddress.line1.trim()}${
-											newAddress.line2.trim() ? ` · ${newAddress.line2.trim()}` : ''
-										}`,
-										reference: newAddress.reference.trim() || null,
-										district: newAddress.district.trim(),
-										province: newAddress.province.trim(),
-										department: newAddress.department.trim(),
-										label: null,
-									})
-									if (!res.ok) {
-										if (
-											/reservado|límite|límite|máximo|elimina/i.test(
-												res.message || ''
-											)
-										) {
-											setAddressBanner({
-												tone: 'error',
-												text:
-													res.message ||
-													'Alcanzaste el límite de direcciones. Puedes continuar sin guardar, o eliminar una dirección existente.',
-											})
-										} else {
-											setAddressBanner({
-												tone: 'error',
-												text:
-													res.message ||
-													'No se pudo guardar la dirección. Continuarás sin guardarla en tu cuenta.',
-											})
-										}
-										setStep('confirm')
-										return
-									}
-									if (res.data && typeof res.data === 'object' && 'id' in res.data) {
-										const saved = res.data as { id: string }
-										const addr = await listUserAddressesServer()
-										if (addr.ok && Array.isArray(addr.data)) {
-											const list = addr.data as unknown as UserAddress[]
-											setAddresses(list)
-											const created =
-												list.find((x) => x.id === saved.id) ?? list[0] ?? null
-											if (created) {
-												setSelectedAddressId(created.id)
-												setAddressMode('existing')
-											}
-										}
-										setAddressBanner({
-											tone: 'ok',
-											text: 'Dirección guardada en tu cuenta.',
-										})
-									}
-								} catch (e) {
-									void e
-									setAddressBanner({
-										tone: 'error',
-										text: 'No se pudo guardar la dirección. Continuarás sin guardarla.',
-									})
-								} finally {
-									setAddressServerBusy(false)
-								}
-							}
-							setStep('confirm')
-						}}
-						className={`w-full rounded-[1.5rem] px-7 py-4 text-sm font-black uppercase tracking-[0.26em] text-white shadow-[0_20px_42px_rgba(31,42,155,0.28)] transition sm:text-base ${
-							canGoConfirm && !addressServerBusy
-								? 'bg-[#1f2a9b] hover:bg-[#2B1F97]'
-								: 'pointer-events-none bg-slate-300 shadow-none'
-						}`}
-					>
-						{addressServerBusy
-							? 'Guardando dirección en tu cuenta…'
-							: 'Continuar a revisar pedido →'}
-					</button>
 					</div>
+
+					<aside className="lg:sticky lg:top-32 lg:col-span-5 lg:h-fit space-y-6">
+						<CheckoutCartSummary cart={cart} />
+						<button
+							type="button"
+							disabled={!canGoConfirm || placePending || addressServerBusy}
+							onClick={async () => {
+								if (
+									addressMode === 'new' &&
+									saveAddressOnConfirm &&
+									!hitAddressLimit
+								) {
+									setAddressServerBusy(true)
+									setAddressBanner(null)
+									try {
+										const res = await createAddress({
+											recipient_name: newAddress.full_name.trim(),
+											recipient_phone: newAddress.phone.trim(),
+											address_line: newAddress.line1.trim(),
+											reference: newAddress.reference.trim() || null,
+											district: newAddress.district.trim(),
+											province: newAddress.province.trim(),
+											department: newAddress.department.trim(),
+											label: null,
+										})
+										if (!res.ok) {
+											if (
+												/reservado|límite|límite|máximo|elimina/i.test(
+													res.message || ''
+												)
+											) {
+												setAddressBanner({
+													tone: 'error',
+													text:
+														res.message ||
+														'Alcanzaste el límite de direcciones. Puedes continuar sin guardar, o eliminar una dirección existente.',
+												})
+											} else {
+												setAddressBanner({
+													tone: 'error',
+													text:
+														res.message ||
+														'No se pudo guardar la dirección. Continuarás sin guardarla en tu cuenta.',
+												})
+											}
+											setStep('confirm')
+											return
+										}
+										if (res.data && typeof res.data === 'object' && 'id' in res.data) {
+											const saved = res.data as { id: string }
+											const addr = await listUserAddressesServer()
+											if (addr.ok && Array.isArray(addr.data)) {
+												const list = addr.data as unknown as UserAddress[]
+												setAddresses(list)
+												const created =
+													list.find((x) => x.id === saved.id) ?? list[0] ?? null
+												if (created) {
+													setSelectedAddressId(created.id)
+													setAddressMode('existing')
+												}
+											}
+											setAddressBanner({
+												tone: 'ok',
+												text: 'Dirección guardada en tu cuenta.',
+											})
+										}
+									} catch (e) {
+										void e
+										setAddressBanner({
+											tone: 'error',
+											text: 'No se pudo guardar la dirección. Continuarás sin guardarla.',
+										})
+									} finally {
+										setAddressServerBusy(false)
+									}
+								}
+								setStep('confirm')
+							}}
+							className={`w-full rounded-[1.5rem] px-7 py-4 text-sm font-black uppercase tracking-[0.26em] text-white shadow-[0_20px_42px_rgba(31,42,155,0.28)] transition sm:text-base ${
+								canGoConfirm && !addressServerBusy
+									? 'bg-[#1f2a9b] hover:bg-[#2B1F97]'
+									: 'pointer-events-none bg-slate-300 shadow-none'
+							}`}
+						>
+							{addressServerBusy
+								? 'Guardando dirección en tu cuenta…'
+								: 'Continuar a revisar pedido →'}
+						</button>
+					</aside>
 				</div>
 			) : null}
 
@@ -1057,9 +962,13 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 						const payload = await buildPlacePayload()
 						const captchaTok = RECAPTCHA_SITE_KEY ? await executeCaptcha('place_order') : null
 						const res = await placeOrderAndWait({ ...payload, captcha_token: captchaTok })
-						if (res && res.ok && res.data) setStep('yape')
+						if (res && res.ok && res.data) {
+							clearStoredCart()
+							setCart({ ...cart, lines: [], totals: { ...cart.totals, subtotal: 0, discount_total: 0, igv_total: 0, shipping_total: 0, total: 0 } })
+							setStep('yape')
+						}
 					}}
-					className="mt-6 grid w-full grid-cols-1 gap-6 lg:grid-cols-12"
+					className="mx-auto mt-6 grid w-full max-w-[1280px] grid-cols-1 gap-6 lg:grid-cols-12"
 				>
 					<aside className="lg:sticky lg:top-32 lg:col-span-5 lg:h-fit space-y-6 lg:order-2">
 						<CheckoutCartSummary cart={cart} />
@@ -1093,10 +1002,7 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 								<p className="font-black text-[#101010]">{newAddress.full_name}</p>
 								<p>📧 {effectiveEmail || 'Sin correo'}</p>
 								<p>📞 {newAddress.phone}</p>
-								<p>
-									{newAddress.line1}
-									{newAddress.line2 ? ` · ${newAddress.line2}` : null}
-								</p>
+								<p>{newAddress.line1}</p>
 								<p>
 									{newAddress.district} / {newAddress.province} / {newAddress.department}
 								</p>
@@ -1105,27 +1011,11 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 								) : null}
 							</div>
 						)}
-						{notes.trim() ? (
-							<div className="mt-4 rounded-[1rem] bg-indigo-50/70 px-4 py-3 text-sm font-semibold leading-7 text-slate-800">
-								Notas: {notes.trim()}
-							</div>
-						) : null}
 						{placeError || placeGlobalError ? (
 							<div className="mt-4 rounded-[1rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold leading-7 text-rose-700">
 								{placeError || placeGlobalError}
 							</div>
 						) : null}
-					</section>
-
-					<section className="rounded-[1.6rem] border border-yellow-200/70 bg-gradient-to-br from-yellow-50 to-amber-50 p-5 shadow-[0_18px_40px_rgba(234,179,8,0.08)] sm:p-7">
-						<p className="text-xs font-black uppercase tracking-[0.3em] text-amber-800">Método de pago</p>
-						<p className="mt-3 text-sm font-black text-[#1f2a9b] sm:text-base">
-							💳 · Yape manual (verificación por nuestro equipo)
-						</p>
-						<p className="mt-2 text-sm font-semibold leading-7 text-slate-700">
-							Generarás el pedido y luego te mostraremos el QR oficial de Sobrao Vape. Pagas el monto exacto, subes la captura y el número de
-							operación. Confirmamos el pago por ti en menos de <strong>6 horas</strong> en horario de atención.
-						</p>
 					</section>
 
 					<div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1149,8 +1039,9 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 			) : null}
 
 			{step === 'yape' && placed ? (
-				<section className="grid gap-6">
-					<div className="rounded-[1.7rem] border border-white/70 bg-gradient-to-br from-white/90 via-white/90 to-indigo-50/90 p-6 text-center shadow-[0_24px_60px_rgba(31,42,155,0.12)] sm:p-9">
+				<section className="mx-auto grid w-full max-w-[1280px] gap-6">
+					<div className="grid gap-6 lg:grid-cols-2">
+					<div className="rounded-[1.7rem] border border-white/70 bg-gradient-to-br from-white/90 via-white/90 to-indigo-50/90 p-6 text-center shadow-[0_24px_60px_rgba(31,42,155,0.12)] sm:p-8">
 						<p className="text-xs font-black uppercase tracking-[0.34em] text-[#1f2a9b]">Pedido {placed.order_number}</p>
 						<p className="mt-4 text-sm font-black uppercase tracking-[0.28em] text-emerald-700">
 							Listo. Ahora realiza el pago con Yape
@@ -1196,235 +1087,156 @@ export default function CheckoutFlow({ initialCart, initialAddresses, initialYap
 									antes de confirmar. Copia el número arriba si tienes dudas.
 								</p>
 								<p className="mt-3">
-									Tu pedido quedará <strong>en revisión</strong> hasta que cotejemos el pago en nuestra app de Yape. En horario de
-									atención esto suele tomar{' '}
-									<strong className="text-emerald-700">menos de 6 horas</strong>.
+									Tu pedido quedará <strong>en revisión</strong> hasta que cotejemos el pago en nuestra app de Yape. Te
+									comunicaremos el estado de tu compra en breves.
 								</p>
 							</div>
 						</div>
 					</div>
 
-					<section className="rounded-[1.7rem] border border-white/70 bg-white/85 p-5 shadow-[0_18px_40px_rgba(31,42,155,0.1)] sm:p-7">
-						<p className="text-xs font-black uppercase tracking-[0.3em] text-[#1f2a9b]">Sube tu comprobante</p>
-						{proofStatus === 'ok' ? (
-							<p className="mt-4 rounded-[1.2rem] bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
-								Comprobante registrado correctamente.
-							</p>
-						) : null}
-						{proofError ? (
-							<p className="mt-4 rounded-[1.2rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
-								{proofError}
-							</p>
+					<div className="flex flex-col gap-5">
+						{initialWhatsapp ? (
+							<a
+								href={`https://wa.me/${initialWhatsapp}?text=${encodeURIComponent(
+									`Hola Sobrao Vape, generé el pedido ${placed.order_number} por ${formatPEN(placed.total)} y quiero coordinar el envío.`
+								)}`}
+								target="_blank"
+								rel="noreferrer"
+								className="flex flex-1 flex-col items-center justify-center gap-4 rounded-[1.7rem] bg-[#25D366] px-6 py-10 text-center text-white shadow-[0_24px_60px_rgba(37,211,102,0.32)] transition hover:brightness-105"
+							>
+								<svg viewBox="0 0 24 24" aria-hidden="true" className="h-14 w-14 fill-current">
+									<path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.347-.347.52-.52.174-.174.232-.298.347-.497.115-.198.057-.371-.058-.52-.116-.148-.652-1.57-.893-2.148-.235-.564-.474-.487-.652-.497-.169-.008-.363-.01-.557-.01-.194 0-.51.073-.776.371-.267.297-1.018.995-1.018 2.427 0 1.432 1.042 2.815 1.188 3.012.146.198 2.05 3.13 4.965 4.393.694.3 1.235.479 1.657.613.696.221 1.33.19 1.83.115.559-.083 1.758-.719 2.006-1.413.248-.694.248-1.29.173-1.414-.074-.124-.272-.198-.57-.347zM12.05 21.785h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.999-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884a9.82 9.82 0 0 1 6.988 2.898 9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.886 9.884zm8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z" />
+								</svg>
+								<span className="text-lg font-black uppercase tracking-[0.16em] sm:text-xl">
+									Coordinar envío por WhatsApp
+								</span>
+								<span className="text-xs font-semibold uppercase tracking-[0.14em] text-white/90">
+									Escríbenos con tu número de pedido
+								</span>
+							</a>
 						) : null}
 
-						<div className="mt-5 grid gap-5">
-							<div className="grid gap-3 sm:grid-cols-[200px_1fr] sm:items-center">
-								<div className="relative aspect-square w-full max-w-[220px] overflow-hidden rounded-[1.2rem] border-2 border-dashed border-indigo-200 bg-indigo-50/60 sm:h-[200px] sm:w-[200px]">
-									{proofPreview ? (
-										<Image
-											src={proofPreview}
-											alt="Previsualización de comprobante Yape"
-											fill
-											className="object-contain"
-										/>
-									) : (
-										<div className="grid h-full w-full place-items-center px-4 text-center text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-											Arrastra la captura<br />o usa el botón
-										</div>
-									)}
-								</div>
-								<div className="space-y-3">
-									<input
-										ref={fileInputRef}
-										type="file"
-										accept="image/*,.pdf"
-										style={{ display: 'none' }}
-										onChange={(e) => onProofPick(e.target.files?.[0] ?? null)}
-									/>
-									<button
-										type="button"
-										onClick={() => fileInputRef.current?.click()}
-										className="w-full rounded-[1.3rem] bg-indigo-50 px-6 py-3.5 text-xs font-black uppercase tracking-[0.22em] text-[#1f2a9b] transition hover:bg-indigo-100 sm:text-sm"
-									>
-										{proofFile ? 'Cambiar comprobante…' : 'Subir captura o PDF de Yape'}
-									</button>
-									<p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-										{proofFile ? `Archivo: ${proofFile.name}` : 'Formato recomendado: captura JPG/PNG hasta 8MB.'}
-									</p>
-								</div>
-							</div>
-
-							<LabeledField label="Número de operación Yape (número largo que Yape te muestra)" required>
-								<input
-									type="text"
-									value={providerReference}
-									onChange={(e) => setProviderReference(e.target.value)}
-									className={fieldClass}
-									placeholder="Ej. 2560041239"
-								/>
-							</LabeledField>
+						<div className="rounded-[1.6rem] border border-emerald-100 bg-emerald-50/70 px-5 py-5 text-left text-sm font-semibold leading-7 text-emerald-900 sm:text-base">
+							<p className="text-xs font-black uppercase tracking-[0.26em] text-emerald-700">Correo enviado</p>
+							<p className="mt-2">
+								Enviamos la confirmación de tu reserva a{' '}
+								<strong className="break-all text-[#1f2a9b]">{placed.contact_email}</strong>. Te estaremos comunicando el estado
+								de tu compra en breves.
+							</p>
 						</div>
 
-						<div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-							<button
-								type="button"
-								disabled={proofStatus === 'uploading' || proofStatus === 'submitting' || proofStatus === 'ok'}
-								onClick={() => {
-									setProofStatus('idle')
-									setProofError(null)
-									setStep('confirm')
-								}}
-								className="w-full rounded-[1.3rem] border border-indigo-100 bg-white px-6 py-3.5 text-xs font-black uppercase tracking-[0.22em] text-[#1f2a9b] transition hover:bg-indigo-50 sm:w-auto sm:text-sm"
-							>
-								← Volver al resumen
-							</button>
-							<button
-								type="button"
-								disabled={proofStatus !== 'idle' && proofStatus !== 'error'}
-								onClick={() => startTransition(onSubmitProof)}
-								className={`w-full rounded-[1.5rem] px-7 py-4 text-sm font-black uppercase tracking-[0.26em] text-white shadow-[0_20px_42px_rgba(31,42,155,0.28)] transition sm:w-auto sm:text-base ${
-									proofStatus === 'uploading' || proofStatus === 'submitting'
-										? 'bg-slate-400 shadow-none'
-										: 'bg-[#1f2a9b] hover:bg-[#2B1F97]'
-								}`}
-							>
-								{proofStatus === 'uploading'
-									? 'Subiendo comprobante a storage seguro…'
-									: proofStatus === 'submitting'
-										? 'Registrando comprobante…'
-										: proofStatus === 'ok'
-											? 'Comprobante enviado ✓'
-											: 'Enviar comprobante y finalizar →'}
-							</button>
-						</div>
-					</section>
-				</section>
-			) : null}
-
-			{step === 'success' && placed ? (
-				<section className="grid gap-6">
-					<div className="rounded-[1.8rem] border border-emerald-200/70 bg-gradient-to-br from-white via-white to-emerald-50 p-7 text-center shadow-[0_24px_60px_rgba(16,185,129,0.12)] sm:p-10">
-						<p className="text-xs font-black uppercase tracking-[0.32em] text-emerald-700">Pedido recibido · verificando pago</p>
-						<p className="mt-4 text-3xl font-black text-[#1f2a9b] sm:text-4xl">{placed.order_number}</p>
-						<p className="mt-5 text-base font-semibold leading-8 text-slate-800 sm:text-lg">
-							¡Listo! Hemos recibido tu comprobante Yape.{' '}
-							<strong className="text-emerald-700">Aún no se ha confirmado el pago</strong> — nuestro equipo lo revisará manualmente y te
-							avisaremos por correo cuando quede aprobado / rechazado.
-						</p>
-						<div className="mt-6 mx-auto grid max-w-[520px] gap-3 text-left rounded-[1.5rem] border border-emerald-100 bg-white px-5 py-4 text-sm font-semibold leading-7 text-slate-800 sm:text-base">
+						<div className="rounded-[1.6rem] border border-indigo-100 bg-white px-5 py-4 text-left text-sm font-semibold leading-7 text-slate-700 sm:text-base">
 							<p>
-								<span className="font-black text-[#101010]">Correo registrado:</span>{' '}
-								<span className="text-[#1f2a9b] break-all">{placed.contact_email}</span>
+								<span className="font-black text-[#101010]">Pedido:</span>{' '}
+								<span className="text-[#1f2a9b]">{placed.order_number}</span>
 							</p>
 							<p>
-								<span className="font-black text-[#101010]">Monto del pedido:</span>{' '}
+								<span className="font-black text-[#101010]">Monto:</span>{' '}
 								<span className="text-[#1f2a9b]">{formatPEN(placed.total)}</span>
 							</p>
 							<p>
 								<span className="font-black text-[#101010]">Método:</span> Yape · verificación manual
 							</p>
-							<p>
-								<span className="font-black text-[#101010]">Tiempo estimado:</span> menos de 6 horas en horario de atención
+						</div>
+					</div>
+					</div>
+
+					{signupOptInShown && !isAuthenticated ? (
+						<div className="rounded-[1.6rem] border border-indigo-100 bg-white p-5 text-left shadow-[0_18px_40px_rgba(31,42,155,0.08)] sm:p-7">
+							<p className="text-xs font-black uppercase tracking-[0.28em] text-[#1f2a9b]">
+								🎉 Guarda tus datos para la próxima compra
 							</p>
-						</div>
-
-						{signupOptInShown ? (
-							<div className="mt-7 rounded-[1.6rem] border border-indigo-100 bg-white p-5 text-left shadow-[0_18px_40px_rgba(31,42,155,0.08)] sm:p-7">
-								<p className="text-xs font-black uppercase tracking-[0.28em] text-[#1f2a9b]">
-									🎉 Guarda tus datos para la próxima compra
-								</p>
-								<p className="mt-3 text-sm font-semibold leading-7 text-slate-800 sm:text-base">
-									¿Quieres convertir este pedido en tu cuenta permanente? Con una cuenta podrás:
-								</p>
-								<ul className="mt-2 space-y-1 text-sm font-semibold leading-7 text-slate-800 sm:text-base">
-									<li>• Ver el estado de tu envío siempre desde este mismo navegador</li>
-									<li>• Guardar direcciones y no volver a escribirlas</li>
-									<li>• Ofertas exclusivas para clientes registrados</li>
-								</ul>
-								<div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-									<LabeledField label="Nombre para tu cuenta (se sugiere el del pedido)">
-										<input
-											type="text"
-											value={signupName}
-											placeholder={placed.contact_recipient_name || 'Tu nombre'}
-											onChange={(e) => setSignupName(e.target.value)}
-											className={fieldClass}
-											autoComplete="name"
-										/>
-									</LabeledField>
-									<LabeledField label="Contraseña (mínimo 6 caracteres)" required>
-										<input
-											type="password"
-											value={signupPassword}
-											onChange={(e) => setSignupPassword(e.target.value)}
-											className={fieldClass}
-											autoComplete="new-password"
-											placeholder="••••••••"
-										/>
-									</LabeledField>
-								</div>
-								{postSignupState.status !== 'idle' ? (
-									<div
-										className={`mt-3 rounded-[1.2rem] px-4 py-3 text-sm font-bold ${
-											postSignupState.status === 'ok'
-												? 'bg-emerald-50 text-emerald-700'
-												: postSignupState.status === 'error'
-													? 'bg-rose-50 text-rose-700'
-													: 'bg-amber-50 text-amber-700'
-										}`}
-									>
-										{postSignupState.status === 'loading'
-											? 'Creando tu cuenta…'
-											: postSignupState.message}
-									</div>
-								) : null}
-								<div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-end">
-									<button
-										type="button"
-										disabled={postSignupState.status === 'loading'}
-										onClick={() => {
-											setSignupOptInShown(false)
-											setPostSignupState({ status: 'idle' })
-										}}
-										className="w-full rounded-[1.3rem] border border-indigo-100 bg-white px-6 py-3.5 text-xs font-black uppercase tracking-[0.22em] text-[#1f2a9b] transition hover:bg-indigo-50 sm:w-auto sm:text-sm"
-									>
-										No, gracias
-									</button>
-									<button
-										type="button"
-										onClick={() => startTransition(handleCreateAccount)}
-										disabled={
-											!placed.contact_email ||
-											postSignupState.status === 'loading' ||
-											postSignupState.status === 'ok' ||
-											signupPassword.length < 6
-										}
-										className="w-full rounded-[1.4rem] bg-[#1f2a9b] px-7 py-3.5 text-xs font-black uppercase tracking-[0.24em] text-white shadow-[0_16px_32px_rgba(31,42,155,0.26)] transition hover:bg-[#2B1F97] disabled:bg-slate-300 disabled:shadow-none sm:w-auto sm:text-sm"
-									>
-										{postSignupState.status === 'loading'
-											? 'Creando cuenta…'
-											: postSignupState.status === 'ok'
-												? 'Cuenta creada ✓'
-												: 'Crear cuenta y guardar mis datos'}
-									</button>
-								</div>
+							<p className="mt-3 text-sm font-semibold leading-7 text-slate-800 sm:text-base">
+								¿Quieres convertir este pedido en tu cuenta permanente? Con una cuenta podrás:
+							</p>
+							<ul className="mt-2 space-y-1 text-sm font-semibold leading-7 text-slate-800 sm:text-base">
+								<li>• Ver el estado de tu envío siempre desde este mismo navegador</li>
+								<li>• Guardar direcciones y no volver a escribirlas</li>
+								<li>• Ofertas exclusivas para clientes registrados</li>
+							</ul>
+							<div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+								<LabeledField label="Nombre para tu cuenta (se sugiere el del pedido)">
+									<input
+										type="text"
+										value={signupName}
+										placeholder={placed.contact_recipient_name || 'Tu nombre'}
+										onChange={(e) => setSignupName(e.target.value)}
+										className={fieldClass}
+										autoComplete="name"
+									/>
+								</LabeledField>
+								<LabeledField label="Contraseña (mínimo 6 caracteres)" required>
+									<input
+										type="password"
+										value={signupPassword}
+										onChange={(e) => setSignupPassword(e.target.value)}
+										className={fieldClass}
+										autoComplete="new-password"
+										placeholder="••••••••"
+									/>
+								</LabeledField>
 							</div>
-						) : null}
-
-						<div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
-							<Link
-								href="/tienda"
-								className="inline-flex items-center justify-center rounded-[1.4rem] border border-indigo-100 bg-white px-7 py-3.5 text-xs font-black uppercase tracking-[0.24em] text-[#1f2a9b] transition hover:bg-indigo-50 sm:text-sm"
-							>
-								Seguir comprando
-							</Link>
-							<Link
-								href="/"
-								className="inline-flex items-center justify-center rounded-[1.4rem] bg-[#1f2a9b] px-7 py-3.5 text-xs font-black uppercase tracking-[0.24em] text-white shadow-[0_16px_32px_rgba(31,42,155,0.26)] transition hover:bg-[#2B1F97] sm:text-sm"
-							>
-								Volver al inicio →
-							</Link>
+							{postSignupState.status !== 'idle' ? (
+								<div
+									className={`mt-3 rounded-[1.2rem] px-4 py-3 text-sm font-bold ${
+										postSignupState.status === 'ok'
+											? 'bg-emerald-50 text-emerald-700'
+											: postSignupState.status === 'error'
+												? 'bg-rose-50 text-rose-700'
+												: 'bg-amber-50 text-amber-700'
+									}`}
+								>
+									{postSignupState.status === 'loading'
+										? 'Creando tu cuenta…'
+										: postSignupState.message}
+								</div>
+							) : null}
+							<div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-end">
+								<button
+									type="button"
+									disabled={postSignupState.status === 'loading'}
+									onClick={() => {
+										setSignupOptInShown(false)
+										setPostSignupState({ status: 'idle' })
+									}}
+									className="w-full rounded-[1.3rem] border border-indigo-100 bg-white px-6 py-3.5 text-xs font-black uppercase tracking-[0.22em] text-[#1f2a9b] transition hover:bg-indigo-50 sm:w-auto sm:text-sm"
+								>
+									No, gracias
+								</button>
+								<button
+									type="button"
+									onClick={() => startTransition(handleCreateAccount)}
+									disabled={
+										!placed.contact_email ||
+										postSignupState.status === 'loading' ||
+										postSignupState.status === 'ok' ||
+										signupPassword.length < 6
+									}
+									className="w-full rounded-[1.4rem] bg-[#1f2a9b] px-7 py-3.5 text-xs font-black uppercase tracking-[0.24em] text-white shadow-[0_16px_32px_rgba(31,42,155,0.26)] transition hover:bg-[#2B1F97] disabled:bg-slate-300 disabled:shadow-none sm:w-auto sm:text-sm"
+								>
+									{postSignupState.status === 'loading'
+										? 'Creando cuenta…'
+										: postSignupState.status === 'ok'
+											? 'Cuenta creada ✓'
+											: 'Crear cuenta y guardar mis datos'}
+								</button>
+							</div>
 						</div>
+					) : null}
+
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
+						<Link
+							href="/tienda"
+							className="inline-flex items-center justify-center rounded-[1.4rem] border border-indigo-100 bg-white px-7 py-3.5 text-xs font-black uppercase tracking-[0.24em] text-[#1f2a9b] transition hover:bg-indigo-50 sm:text-sm"
+						>
+							Seguir comprando
+						</Link>
+						<Link
+							href="/"
+							className="inline-flex items-center justify-center rounded-[1.4rem] bg-[#1f2a9b] px-7 py-3.5 text-xs font-black uppercase tracking-[0.24em] text-white shadow-[0_16px_32px_rgba(31,42,155,0.26)] transition hover:bg-[#2B1F97] sm:text-sm"
+						>
+							Volver al inicio →
+						</Link>
 					</div>
 				</section>
 			) : null}
