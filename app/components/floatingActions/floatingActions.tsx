@@ -12,14 +12,22 @@ function FloatingIconButton({
 	label,
 	src,
 	onClick,
+	iconClassName,
 }: {
 	label: string
 	src: string
 	onClick: () => void
+	iconClassName?: string
 }) {
 	return (
 		<button type="button" aria-label={label} onClick={onClick} className={floatingButtonClass}>
-			<Image src={src} alt="" width={30} height={30} className="h-[30px] w-[30px] object-contain" />
+			<Image
+				src={src}
+				alt=""
+				width={30}
+				height={30}
+				className={iconClassName ?? 'h-[30px] w-[30px] object-contain'}
+			/>
 		</button>
 	)
 }
@@ -48,6 +56,7 @@ export default function FloatingActions() {
 					label="Chatear por WhatsApp"
 					src="/icons/whatsapp.svg"
 					onClick={openWhatsApp}
+					iconClassName="h-full w-full"
 				/>
 			</div>
 
