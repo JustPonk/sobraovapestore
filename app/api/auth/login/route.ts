@@ -65,8 +65,8 @@ export async function POST(req: NextRequest) {
 		const code = error.code || ''
 		const msg = error.message || 'Credenciales incorrectas.'
 		if (/email_not_confirmed|email_not_verified/i.test(code) || /confirm.*email|verifica/i.test(msg)) {
-			const admin = createAdminClient()
-			if (admin) {
+			try {
+				const admin = createAdminClient()
 				await admin.auth
 					.resend({
 						type: 'signup',
@@ -79,6 +79,8 @@ export async function POST(req: NextRequest) {
 						},
 					})
 					.catch(() => null)
+			} catch (resendErr) {
+				console.warn('[auth/login] no se pudo reenviar el correo de confirmación:', resendErr)
 			}
 			return NextResponse.json({
 				ok: false,
