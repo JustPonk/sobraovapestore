@@ -186,6 +186,7 @@ export default function Navbar() {
 					wrapRef={search.wrapRef}
 					onOpen={search.openDesktop}
 					onValueChange={search.setValue}
+					onClose={() => search.setDesktopOpen(false)}
 				/>
 
 				{/* RIGHT: Tienda, Nosotros, Carrito, Persona — in that order.
@@ -238,7 +239,7 @@ export default function Navbar() {
 							}`}
 						>
 							<span className="pointer-events-none absolute inset-[1px] rounded-[27px] border border-white/10" />
-							<span className="pointer-events-none absolute inset-x-6 top-[2px] h-8 rounded-full bg-white/18 blur-sm" />
+							<span className="pointer-events-none absolute inset-x-6 top-[2px] h-8 rounded-full bg-white/10 blur-sm" />
 							<div className="relative z-10 flex flex-col gap-1">
 								{accountLinks.map((item) =>
 									item.action === 'signOut' ? (
@@ -291,6 +292,7 @@ export default function Navbar() {
 				value={search.value}
 				onOpen={search.openDesktop}
 				onValueChange={search.setValue}
+				onClose={search.closeMobile}
 			/>
 
 			{/* Mobile menu panel: Tienda + Nosotros plus the account links,

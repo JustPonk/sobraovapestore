@@ -16,7 +16,7 @@ export const navbarStyles = {
 	iconButton: 'h-10 w-10 min-w-0 shrink-0 justify-center px-0',
 	actions: 'flex shrink-0 items-center gap-1.5 sm:gap-2 lg:gap-3',
 	dropdown:
-		'absolute right-0 top-[calc(100%+10px)] z-50 w-[min(240px,calc(100vw-2rem))] rounded-[28px] border border-white/20 bg-white/12 p-2 backdrop-blur-2xl transition-all duration-300',
+		'absolute right-0 top-[calc(100%+10px)] z-50 w-[min(240px,calc(100vw-2rem))] rounded-[28px] border border-white/15 bg-[#0b0734]/80 p-2 shadow-[0_18px_45px_rgba(5,3,26,0.55)] backdrop-blur-2xl transition-all duration-300',
 	dropdownLink:
 		'rounded-[20px] px-4 py-3 text-sm font-bold uppercase tracking-[0.1em] text-white/92 transition duration-200 hover:bg-white/12 hover:text-white',
 	mobilePanel: 'border-t border-white/10 bg-[#2B1F97] px-3 py-3 sm:px-5 md:hidden',

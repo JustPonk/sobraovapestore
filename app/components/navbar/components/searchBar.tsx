@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import GlassButton from '../../glassButton/glassButton'
+import SearchPanel from './searchPanel'
 
 type SearchBarMode = 'desktop' | 'mobile'
 
@@ -14,6 +15,7 @@ interface SearchBarProps {
 	wrapRef?: React.RefObject<HTMLDivElement | null>
 	onOpen: () => void
 	onValueChange: (value: string) => void
+	onClose?: () => void
 }
 
 interface SearchBarTriggerProps {
@@ -51,9 +53,8 @@ export function useNavbarSearch() {
 
 	useEffect(() => {
 		const handleClickOutside = (event: MouseEvent) => {
-			if (!wrapRef.current?.contains(event.target as Node) && value.trim() === '') {
-				setIsDesktopOpen(false)
-			}
+			if (wrapRef.current?.contains(event.target as Node)) return
+			setIsDesktopOpen(false)
 		}
 
 		const handleEscape = (event: KeyboardEvent) => {
@@ -71,7 +72,7 @@ export function useNavbarSearch() {
 			document.removeEventListener('mousedown', handleClickOutside)
 			document.removeEventListener('keydown', handleEscape)
 		}
-	}, [value])
+	}, [])
 
 	const toggleMobile = () => {
 		setIsMobileOpen((current) => !current)
@@ -118,7 +119,9 @@ export default function SearchBar({
 	wrapRef,
 	onOpen,
 	onValueChange,
+	onClose,
 }: SearchBarProps) {
+	const submitRef = useRef<(() => void) | null>(null)
 	const fieldWidth = mode === 'desktop' ? (isOpen ? DESKTOP_WIDTH_OPEN : DESKTOP_WIDTH_CLOSED) : undefined
 
 	if (mode === 'mobile' && !isOpen) {
@@ -126,20 +129,32 @@ export default function SearchBar({
 	}
 
 	const field = (
-		<div className={searchBarStyles.field} style={fieldWidth ? { width: fieldWidth } : undefined}>
-			<input
-				ref={inputRef}
-				type="text"
-				value={value}
-				onChange={(event) => onValueChange(event.target.value)}
-				onFocus={onOpen}
-				placeholder="BUSCA TU HUMO"
-				autoFocus={mode === 'mobile'}
-				className={searchBarStyles.input}
-			/>
-			<span className={searchBarStyles.iconWrap}>
-				<Search className="h-4 w-4" />
-			</span>
+		<div className="relative">
+			<div className={searchBarStyles.field} style={fieldWidth ? { width: fieldWidth } : undefined}>
+				<input
+					ref={inputRef}
+					type="text"
+					value={value}
+					onChange={(event) => onValueChange(event.target.value)}
+					onFocus={onOpen}
+					onKeyDown={(event) => {
+						if (event.key === 'Enter') {
+							event.preventDefault()
+							submitRef.current?.()
+						}
+					}}
+					placeholder="BUSCA TU HUMO"
+					autoFocus={mode === 'mobile'}
+					className={searchBarStyles.input}
+				/>
+				<span className={searchBarStyles.iconWrap}>
+					<Search className="h-4 w-4" />
+				</span>
+			</div>
+
+			{isOpen ? (
+				<SearchPanel mode={mode} query={value} submitRef={submitRef} onClose={onClose} />
+			) : null}
 		</div>
 	)
 
