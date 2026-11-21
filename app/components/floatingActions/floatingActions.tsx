@@ -41,7 +41,9 @@ export default function FloatingActions() {
 	return (
 		<>
 			<div className="fixed bottom-5 left-3 z-[70] flex flex-col gap-3 sm:bottom-7 sm:left-5 md:left-6 lg:left-8 xl:left-10">
-				<FloatingIconButton label="Abrir chatbot" src="/icons/chatbot.svg" onClick={openChatbot} />
+				<div className="hidden lg:block">
+					<FloatingIconButton label="Abrir chatbot" src="/icons/chatbot.svg" onClick={openChatbot} />
+				</div>
 				<FloatingIconButton
 					label="Chatear por WhatsApp"
 					src="/icons/whatsapp.svg"
@@ -49,7 +51,7 @@ export default function FloatingActions() {
 				/>
 			</div>
 
-			<div className="fixed bottom-5 right-3 z-[70] flex flex-col gap-3 sm:bottom-7 sm:right-5 md:right-6 lg:right-8 xl:right-10">
+			<div className="fixed bottom-5 right-3 z-[70] hidden flex-col gap-3 sm:bottom-7 sm:right-5 md:right-6 lg:flex lg:left-auto lg:right-8 xl:right-10">
 				<FloatingIconButton label="Volver arriba" src="/icons/arrow-up.svg" onClick={scrollToTop} />
 				{/* TODO: confirmar función real del botón inferior derecho del mockup. */}
 				<Link aria-label="Ver carrito" href="/carrito" className={floatingButtonClass}>
