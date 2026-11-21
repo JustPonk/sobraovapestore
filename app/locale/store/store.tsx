@@ -5,14 +5,22 @@ import { storefrontFrameClass } from './storeStyles'
 
 interface StoreProps {
 	activeFilterParam?: string | null
+	searchQueryParam?: string | null
 }
 
-export default async function Store({ activeFilterParam }: StoreProps) {
+export default async function Store({ activeFilterParam, searchQueryParam }: StoreProps) {
 	try {
 		const [products, combos] = await Promise.all([getStoreProducts(), getStoreCombos()])
 		const activeFilter = resolveActiveFilter(activeFilterParam ?? null)
 
-		return <ProductGrid products={products} combos={combos} activeFilter={activeFilter} />
+		return (
+			<ProductGrid
+				products={products}
+				combos={combos}
+				activeFilter={activeFilter}
+				searchQuery={searchQueryParam ?? null}
+			/>
+		)
 	} catch (error) {
 		return (
 			<section className={`${storefrontFrameClass} py-12 sm:py-16`}>

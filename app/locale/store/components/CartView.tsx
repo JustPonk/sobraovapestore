@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 
 import { formatPEN } from '@/utils/format'
+import PurchaseSteps from '@/app/components/purchaseSteps/purchaseSteps'
 import {
 	getCurrentCart,
 	removeCartLine,
@@ -26,6 +27,14 @@ interface CartViewProps {
 	initialCart: CartPayload | null
 }
 
+function resolveImageSrc(imageUrl: string | null | undefined) {
+	if (!imageUrl) return '/itemhero.png'
+	if (/^https?:\/\//i.test(imageUrl) || imageUrl.startsWith('/')) return imageUrl
+	const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+	if (!supabaseUrl) return '/itemhero.png'
+	return `${supabaseUrl}/storage/v1/object/public/${imageUrl.replace(/^\/+/, '')}`
+}
+
 const EmptyCart: React.FC = () => (
 	<div className="flex flex-col items-center gap-4 rounded-[1.4rem] border border-white/70 bg-white/75 px-6 py-12 text-center shadow-[0_12px_30px_rgba(31,42,155,0.08)]">
 		<div className="grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-indigo-500/15 to-fuchsia-400/10 text-3xl">
@@ -34,10 +43,9 @@ const EmptyCart: React.FC = () => (
 		<p className="text-[0.72rem] font-black uppercase tracking-[0.3em] text-[#1f2a9b]">
 			Tu carrito está vacío
 		</p>
-		<p className="max-w-sm text-sm leading-7 text-slate-600 sm:text-base">
-			Añade productos desde la tienda. Los totales se calculan automáticamente con stock en
-			tiempo real.
-		</p>
+                <p className="max-w-sm text-sm font-semibold leading-6 text-slate-600 sm:text-base">
+                        Descubre tus favoritos y arma tu próxima compra en minutos.
+                </p>
 		<Link
 			href="/tienda"
 			className="mt-2 inline-flex items-center justify-center rounded-[1.1rem] bg-[#1f2a9b] px-7 py-2.5 text-[0.72rem] font-black uppercase tracking-[0.24em] text-white shadow-[0_10px_26px_rgba(31,42,155,0.28)] transition hover:bg-[#2B1F97]"
@@ -113,6 +121,8 @@ export default function CartView({ showBuyNowMessage = false, initialCart }: Car
 	const totals = cart?.totals
 	const items = cart?.lines ?? []
 	const storedCount = typeof window !== 'undefined' ? getStoredCart().length : 0
+	// El subtotal incluye el precio anterior; para el envío gratis solo cuenta lo que realmente se paga.
+	const paidNet = (totals?.subtotal ?? 0) - (totals?.discount_total ?? 0) / 1.18
 
 	const onQty = (lineId: string, variantId: string, nextQty: number, comboId?: string | null) => {
 		setPendingMap((m) => ({ ...m, [lineId]: 'update' }))
@@ -199,14 +209,13 @@ export default function CartView({ showBuyNowMessage = false, initialCart }: Car
 		return { text: 'Hay stock', className: 'text-emerald-600' }
 	}
 
-	const hasDroppedMessage = Boolean(
-		syncState?.ok && syncState?.message && syncState.message.includes('omitieron')
-	)
+        const hasDroppedMessage = Boolean(
+                syncState?.ok && syncState?.message && syncState.message.includes('omitieron')
+        )
 	const bannerLevel = (() => {
 		if (syncState && !syncState.ok) return 'error'
-		if (isSyncPending) return 'info'
-		if (showBuyNowMessage && items.length > 0 && !hasDroppedMessage) return 'success'
-		if (hasDroppedMessage) return 'warn'
+                if (isSyncPending) return 'info'
+                if (showBuyNowMessage && items.length > 0 && !hasDroppedMessage) return 'success'
 		if (storedCount > 0 && items.length === 0) return 'warn'
 		if (showBuyNowMessage) return 'info'
 		return null
@@ -238,20 +247,6 @@ export default function CartView({ showBuyNowMessage = false, initialCart }: Car
 								className="mt-2 inline-flex items-center gap-2 rounded-full bg-rose-600 px-4 py-1.5 text-[0.66rem] font-black uppercase tracking-[0.18em] text-white shadow-sm transition hover:bg-rose-700"
 							>
 								Reintentar
-							</button>
-						</>
-					) : bannerLevel === 'warn' && hasDroppedMessage && syncState?.message ? (
-						<>
-							<p className="mb-1 uppercase tracking-[0.18em] text-[0.66rem] opacity-80">
-								Algunos productos no se agregaron
-							</p>
-							<p className="whitespace-pre-wrap leading-relaxed">{syncState.message}</p>
-							<button
-								type="button"
-								onClick={() => void syncStoredCartAndFetchLatest()}
-								className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-600 px-4 py-1.5 text-[0.66rem] font-black uppercase tracking-[0.18em] text-white shadow-sm transition hover:bg-amber-700"
-							>
-								Volver a sincronizar
 							</button>
 						</>
 					) : bannerLevel === 'warn' ? (
@@ -289,22 +284,9 @@ export default function CartView({ showBuyNowMessage = false, initialCart }: Car
 
 			{items.length ? (
 				<div className="mx-auto w-full max-w-[1280px]">
-					<nav
-						aria-label="Flujo de compra"
-						className="mb-6 flex w-full items-center justify-center gap-3 text-center text-sm font-semibold sm:gap-4 sm:text-base"
-					>
-						<span className="text-lg font-black uppercase tracking-[0.22em] text-[#111111] sm:text-xl">
-							Carrito
-						</span>
-						<span className="text-slate-300">›</span>
-						<span className="text-slate-400 uppercase tracking-[0.18em] sm:font-bold">
-							Recojo o Delivery
-						</span>
-						<span className="text-slate-300">›</span>
-						<span className="text-slate-300 uppercase tracking-[0.18em]">
-							Orden completada
-						</span>
-					</nav>
+					<div className="mb-6">
+						<PurchaseSteps current="carrito" />
+					</div>
 
 				<div className="grid w-full gap-5 lg:grid-cols-12 lg:items-start">
 					{/* Left: Productos */}
@@ -322,7 +304,7 @@ export default function CartView({ showBuyNowMessage = false, initialCart }: Car
 									const line = group.lines[0]
 									const variant = line.variant
 									const product = line.product
-									const img = variant?.primary_image ?? '/itemhero.png'
+									const img = resolveImageSrc(variant?.primary_image)
 									const attributes = (variant?.attributes ?? []).slice(0, 3)
 									const isPending = Boolean(pendingMap[line.id])
 									const unitSubtotal = line.unit_price * line.quantity
@@ -460,7 +442,7 @@ export default function CartView({ showBuyNowMessage = false, initialCart }: Car
 									(s, l) => s + (l.unit_price ?? 0) * (l.quantity ?? 0),
 									0
 								)
-								const comboImg = representative?.variant?.primary_image ?? '/itemhero.png'
+								const comboImg = resolveImageSrc(representative?.variant?.primary_image)
 								const isPending = Boolean(pendingMap[representative?.id ?? ''])
 								const minAvailable = lines.reduce(
 									(acc, l) =>
@@ -647,7 +629,7 @@ export default function CartView({ showBuyNowMessage = false, initialCart }: Car
 											5,
 											Math.min(
 												100,
-												(((totals?.subtotal ?? 0) * 100) / 285)
+												((paidNet * 100) / 285)
 											)
 										)}%`,
 									}}
@@ -664,7 +646,7 @@ export default function CartView({ showBuyNowMessage = false, initialCart }: Car
 								<div className="flex items-center justify-between gap-3">
 									<span className="font-semibold text-slate-700">Subtotal</span>
 									<span className="font-black text-slate-900">
-										{formatPEN(totals?.subtotal ?? 0)}
+										{formatPEN((totals?.subtotal ?? 0) + (totals?.igv_total ?? 0))}
 									</span>
 								</div>
 								{totals && totals.discount_total && totals.discount_total > 0 ? (

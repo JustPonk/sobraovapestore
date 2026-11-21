@@ -4,37 +4,9 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { Star } from 'lucide-react'
-
 import { upsertCartItem } from '../cartStorage'
 import type { StoreProduct, StoreVariantSummary } from '../data'
 import PromotionBadge from './PromotionBadge'
-
-interface RatingStarsProps {
-	rating: number
-}
-
-function RatingStars({ rating }: RatingStarsProps) {
-	return (
-		<div className="flex items-center gap-1 text-[#1f2a9b]">
-			{Array.from({ length: 5 }).map((_, index) => {
-				const fillLevel = Math.max(0, Math.min(1, rating - index))
-
-				return (
-					<span key={index} className="relative inline-flex">
-						<Star className="h-4 w-4 text-[#c9c0ff]" fill="currentColor" />
-						<span
-							className="absolute inset-0 overflow-hidden"
-							style={{ width: `${fillLevel * 100}%` }}
-						>
-							<Star className="h-4 w-4 text-[#1f2a9b]" fill="currentColor" />
-						</span>
-					</span>
-				)
-			})}
-		</div>
-	)
-}
 
 function formatPen(value: number) {
 	return new Intl.NumberFormat('es-PE', {
@@ -52,20 +24,13 @@ function getVariantFallbackImage(v: StoreVariantSummary | null | undefined, fall
 	return { src: first?.src ?? fallback, alt: first?.alt ?? 'Producto' }
 }
 
-function variantDisplayName(v: StoreVariantSummary | null | undefined) {
-	const n = v?.name?.trim()
-	if (n) return n
-	return 'Clásico'
-}
-
 const HOVER_ROTATE_MS = 1200
 
 interface ProductCardProps {
 	product: StoreProduct
-	activeFilter?: string | null
 }
 
-export default function ProductCard({ product, activeFilter }: ProductCardProps) {
+export default function ProductCard({ product }: ProductCardProps) {
 	const router = useRouter()
 	const [isAdded, setIsAdded] = useState(false)
 	const [activeIdx, setActiveIdx] = useState(0)
@@ -79,7 +44,7 @@ export default function ProductCard({ product, activeFilter }: ProductCardProps)
 	const activeVariantStock = activeVariant?.stockAvailable ?? 0
 	const isOutOfStock = !hasAnyStock || activeVariantStock <= 0
 
-	const { src: imageSrc, alt: imageAlt } = getVariantFallbackImage(activeVariant, '/itemhero.png')
+	const { src: imageSrc, alt: imageAlt } = getVariantFallbackImage(activeVariant, product.imageSrc)
 	const displayPrice = activeVariant?.displayPrice ?? product.variant?.displayPrice ?? 0
 
 	function startRotation() {
@@ -105,7 +70,7 @@ export default function ProductCard({ product, activeFilter }: ProductCardProps)
 	const handleAddToCart = () => {
 		const variantToAdd = activeVariant ?? product.variant
 		if (!variantToAdd) return
-		const { src: cartImg } = getVariantFallbackImage(variantToAdd, '/itemhero.png')
+		const { src: cartImg } = getVariantFallbackImage(variantToAdd, product.imageSrc)
 
 		upsertCartItem({
 			productId: product.id,
@@ -130,8 +95,8 @@ export default function ProductCard({ product, activeFilter }: ProductCardProps)
 	}
 
 	const isPromoCard = Boolean(
-		product.promotion ||
-			activeFilter === 'promociones' ||
+		product.isPromoted ||
+			product.promotion ||
 			product.categorySlug === 'promociones' ||
 			product.filterSlugs.includes('promociones')
 	)
@@ -142,7 +107,7 @@ export default function ProductCard({ product, activeFilter }: ProductCardProps)
 
 	return (
 		<div className="relative h-full w-full">
-			{isPromoCard ? <PromotionBadge label={product.promotion?.badgeLabel ?? '-0%'} /> : null}
+			{isPromoCard ? <PromotionBadge label={product.promotionLabel} /> : null}
 
 			<article
 				onMouseEnter={startRotation}
@@ -173,7 +138,6 @@ export default function ProductCard({ product, activeFilter }: ProductCardProps)
 							{variants.map((v, i) => (
 								<span
 									key={v.id ?? i}
-									title={variantDisplayName(v)}
 									className={`h-1.5 rounded-full transition-all ${
 										i === safeActiveIdx ? 'w-5 bg-[#1f2a9b]' : 'w-1.5 bg-[#1f2a9b]/25'
 									}`}
@@ -188,15 +152,9 @@ export default function ProductCard({ product, activeFilter }: ProductCardProps)
 						href={`/producto/${encodeURIComponent(product.slug)}`}
 						className="block rounded-[1.3rem] bg-[#f3efff]/75 border border-white/50 px-4 py-3 space-y-3 transition hover:bg-[#efeaff]"
 					>
-						<div className="flex items-center justify-between gap-3">
-							<span className="min-w-0 truncate text-[0.68rem] font-bold uppercase tracking-[0.18em] text-[#3c4bd6]/90">
-								{variantDisplayName(activeVariant)}
-							</span>
-							<RatingStars rating={product.rating} />
-						</div>
 						<div className="flex items-end justify-between gap-3">
 							<h3 className="min-w-0 truncate text-xl font-black uppercase leading-tight text-[#121212]">
-								{product.name}
+								{[product.brandName, product.name].filter(Boolean).join(' ')}
 							</h3>
 							<span className="shrink-0 text-lg font-black text-[#1f2a9b] sm:text-xl">
 								{formatPen(displayPrice)}
@@ -210,7 +168,7 @@ export default function ProductCard({ product, activeFilter }: ProductCardProps)
 								type="button"
 								onClick={handleBuyNow}
 								disabled={isOutOfStock}
-								className={`inline-flex w-full items-center justify-center rounded-full px-5 py-3 text-sm font-black uppercase tracking-[0.15em] transition ${
+								className={`inline-flex w-full items-center justify-center rounded-full px-5 py-3 text-xs font-black uppercase tracking-[0.1em] transition ${
 									isOutOfStock
 										? 'cursor-not-allowed bg-slate-400 text-white/80'
 										: 'bg-[#1f2a9b] text-white hover:-translate-y-0.5 hover:shadow-[0_16px_28px_rgba(31,42,155,0.28)]'
@@ -223,7 +181,7 @@ export default function ProductCard({ product, activeFilter }: ProductCardProps)
 								type="button"
 								onClick={handleAddToCart}
 								disabled={isOutOfStock}
-								className={`inline-flex w-full items-center justify-center rounded-full border px-5 py-3 text-sm font-black uppercase tracking-[0.15em] transition ${
+								className={`inline-flex w-full items-center justify-center rounded-full border px-5 py-3 text-xs font-black uppercase tracking-[0.1em] transition ${
 									isOutOfStock
 										? 'cursor-not-allowed border-slate-300 bg-white/70 text-slate-400'
 										: 'border-[#1f2a9b] bg-white/70 text-[#1f2a9b] hover:-translate-y-0.5 hover:bg-white'

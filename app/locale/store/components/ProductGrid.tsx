@@ -22,6 +22,35 @@ interface ProductGridProps {
 	products: StoreProduct[]
 	combos: StoreCombo[]
 	activeFilter: StoreFilterKey
+	searchQuery?: string | null
+}
+
+function normalizeText(value: string | null | undefined): string {
+	return (value ?? '')
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.toLowerCase()
+		.trim()
+}
+
+function matchQuery(item: CatalogItem, query: string): boolean {
+	const target = normalizeText(query)
+	if (!target) return false
+
+	if (item.type === 'product') {
+		const product = item.data
+		const haystack = [
+			product.name,
+			product.brandName,
+			product.categoryName,
+			...product.tagNames,
+		]
+		return haystack.some((value) => normalizeText(value).includes(target))
+	}
+
+	const combo = item.data
+	const haystack = [combo.name, combo.brandName, combo.categoryName]
+	return haystack.some((value) => normalizeText(value).includes(target))
 }
 
 function matchFilter(item: CatalogItem, activeFilter: StoreFilterKey, matchers: string[]): boolean {
@@ -31,7 +60,7 @@ function matchFilter(item: CatalogItem, activeFilter: StoreFilterKey, matchers: 
 			const hasPromotion = Boolean(product.promotion)
 			const inPromotionsCategory = product.categorySlug === 'promociones'
 			const hasPromotionInSlugs = product.filterSlugs.includes('promociones')
-			return hasPromotion || inPromotionsCategory || hasPromotionInSlugs
+			return product.isPromoted || hasPromotion || inPromotionsCategory || hasPromotionInSlugs
 		}
 		if (activeFilter === 'nuevo') {
 			const inNuevoCategory =
@@ -58,50 +87,78 @@ function matchFilter(item: CatalogItem, activeFilter: StoreFilterKey, matchers: 
 	return matchers.some((matcher) => combo.filterSlugs.includes(matcher))
 }
 
-export default function ProductGrid({ products, combos, activeFilter }: ProductGridProps) {
+function isPromotedItem(item: CatalogItem): boolean {
+	return item.type === 'product' && item.data.isPromoted
+}
+
+export default function ProductGrid({ products, combos, activeFilter, searchQuery }: ProductGridProps) {
 	const activeFilterConfig = storeFilters.find((filter) => filter.key === activeFilter) ?? storeFilters[0]
+
+	const trimmedQuery = (searchQuery ?? '').trim()
+	const isSearching = trimmedQuery.length > 0
 
 	const filteredItems = useMemo(() => {
 		const allItems: CatalogItem[] = [
 			...products.map<CatalogItem>((product) => ({ type: 'product', data: product })),
 			...combos.map<CatalogItem>((combo) => ({ type: 'combo', data: combo })),
 		]
-		return allItems.filter((item) => matchFilter(item, activeFilter, activeFilterConfig.matchers))
-	}, [activeFilter, activeFilterConfig.matchers, products, combos])
+		if (isSearching) {
+			return allItems.filter((item) => matchQuery(item, trimmedQuery))
+		}
+		const filtered = allItems.filter((item) =>
+			matchFilter(item, activeFilter, activeFilterConfig.matchers)
+		)
+		if (activeFilter === 'promociones') return filtered
+		// Los productos en promoción se muestran primero en su categoría real.
+		return filtered.sort(
+			(left, right) => Number(isPromotedItem(right)) - Number(isPromotedItem(left))
+		)
+	}, [activeFilter, activeFilterConfig.matchers, isSearching, products, combos, trimmedQuery])
 
-	return (
-		<section className={`${storefrontFrameClass} space-y-8 py-10 sm:space-y-10 sm:py-14`}>
-			<FilterTabs activeFilter={activeFilter} />
+        return (
+                <section className={`${storefrontFrameClass} space-y-7 pt-4 pb-10 sm:space-y-9 sm:pt-6 sm:pb-14`}>
+			{isSearching ? null : <FilterTabs activeFilter={activeFilter} />}
 
 			<div className={storefrontSectionTitleWrapClass}>
-				<p className={storefrontSectionEyebrowClass}>Directo a la categoría</p>
+				<p className={storefrontSectionEyebrowClass}>
+					{isSearching ? 'Resultados de búsqueda' : 'Directo a la categoría'}
+				</p>
 				<h1 className={storefrontSectionTitleClass}>
-					★ {activeFilterConfig.label.toUpperCase()} ★
+					{isSearching
+						? `★ ${trimmedQuery.toUpperCase()} ★`
+						: `★ ${activeFilterConfig.label.toUpperCase()} ★`}
 				</h1>
 			</div>
 
 			{filteredItems.length ? (
-				<div className="mx-auto grid w-full max-w-[80rem] grid-cols-1 gap-5 md:grid-cols-3 md:gap-6 justify-items-center">
+				<div className="mx-auto grid w-full max-w-[80rem] grid-cols-2 gap-x-3 gap-y-8 px-2 sm:gap-x-5 sm:gap-y-12 sm:px-0 md:grid-cols-3 md:gap-x-6 md:gap-y-14 justify-items-center">
 					{filteredItems.map((item) => (
 						<div key={`${item.type}-${item.data.id}`} className="w-full max-w-[24rem]">
 							{item.type === 'product' ? (
-								<ProductCard product={item.data} activeFilter={activeFilter} />
+								<ProductCard product={item.data} />
 							) : (
 								<ComboCard combo={item.data} />
 							)}
 						</div>
 					))}
 				</div>
-			) : (
-				<div className="flex min-h-[280px] items-center justify-center rounded-[1.8rem] border border-white/70 bg-white/50 px-6 py-12 text-center shadow-[0_16px_30px_rgba(31,42,155,0.08)]">
+                        ) : (
+                                <div className="mx-auto flex min-h-[280px] w-full max-w-[80rem] items-center justify-center rounded-[1.8rem] border border-white/70 bg-white/50 px-6 py-12 text-center shadow-[0_16px_30px_rgba(31,42,155,0.08)]">
 					<div className="space-y-3">
 						<p className="text-sm font-black uppercase tracking-[0.24em] text-[#1f2a9b]">
 							Sin resultados
 						</p>
-						<p className="max-w-[34rem] text-sm leading-7 text-slate-600 sm:text-base">
-							Todavía no hay productos publicados para <strong>{activeFilterConfig.label}</strong>.
-							En cuanto se carguen en Supabase aparecerán aquí sin necesidad de mockear datos.
-						</p>
+						{isSearching ? (
+							<p className="max-w-[34rem] text-sm leading-7 text-slate-600 sm:text-base">
+								No encontramos productos para <strong>{trimmedQuery}</strong>. Prueba con otro
+								nombre, sabor o etiqueta.
+							</p>
+						) : (
+							<p className="max-w-[34rem] text-sm leading-7 text-slate-600 sm:text-base">
+                                                                Todavía no hay productos disponibles para <strong>{activeFilterConfig.label}</strong>.
+                                                                Pronto encontrarás opciones nuevas en esta categoría.
+							</p>
+						)}
 					</div>
 				</div>
 			)}

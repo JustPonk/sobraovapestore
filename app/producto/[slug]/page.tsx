@@ -4,8 +4,9 @@ import { notFound } from 'next/navigation'
 
 import Footer from '@/app/components/footer/footer'
 import Navbar from '@/app/components/navbar/navbar'
-import { getStoreProductBySlug } from '@/app/locale/store/data'
+import { getRelatedProducts, getStoreProductBySlug } from '@/app/locale/store/data'
 import ProductDetail from '@/app/locale/store/components/ProductDetail'
+import RelatedProducts from '@/app/locale/store/components/RelatedProducts'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -37,6 +38,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
 		notFound()
 	}
 
+	const relatedProducts = await getRelatedProducts(product, 3)
+
 	return (
 		<div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(143,104,255,0.16),transparent_28%),linear-gradient(180deg,#f9f8ff_0%,#f5f3ff_40%,#ffffff_100%)] text-slate-900">
 			<div className="fixed inset-x-0 top-0 z-[60]">
@@ -48,7 +51,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
 					<ProductDetail product={product} />
 				</section>
 
-				<section className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 pb-16 sm:px-6 lg:px-8">
+				<RelatedProducts products={relatedProducts} />
+
+				<section className="mx-auto flex w-full max-w-7xl items-center justify-center px-4 pb-16 sm:px-6 lg:px-8">
 					<Link
 						href="/tienda"
 						className="text-[0.7rem] font-bold uppercase tracking-[0.22em] text-slate-500 transition hover:text-[#1f2a9b]"

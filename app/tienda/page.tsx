@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 }
 
 interface TiendaPageProps {
-	searchParams?: Promise<{ filter?: string }>
+	searchParams?: Promise<{ filter?: string; q?: string }>
 }
 
 export default async function TiendaPage({ searchParams }: TiendaPageProps) {
@@ -25,9 +25,12 @@ export default async function TiendaPage({ searchParams }: TiendaPageProps) {
 				<Navbar />
 			</div>
 
-			<main className="pt-28 sm:pt-32">
+                        <main className="pt-20 sm:pt-24">
 				<section className="w-full bg-[url('/BGContent.png')] bg-cover bg-center bg-no-repeat">
-					<Store activeFilterParam={resolvedSearchParams?.filter} />
+					<Store
+						activeFilterParam={resolvedSearchParams?.filter}
+						searchQueryParam={resolvedSearchParams?.q}
+					/>
 				</section>
 			</main>
 

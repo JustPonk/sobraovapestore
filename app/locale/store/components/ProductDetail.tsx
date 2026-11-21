@@ -3,8 +3,8 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, ChevronLeft, Minus, Plus, ShoppingBag, Star } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { ChevronDown, Minus, Plus, ShoppingBag, Star } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { upsertCartItem } from '../cartStorage'
 import type { StoreProduct, StoreVariantSummary, StoreProductImage } from '../data'
@@ -66,14 +66,37 @@ export default function ProductDetail({ product }: ProductDetailProps) {
 	const [activeImageIndex, setActiveImageIndex] = useState(0)
 	const [qty, setQty] = useState(1)
 	const [isAdded, setIsAdded] = useState(false)
+	const [galleryPaused, setGalleryPaused] = useState(false)
+	const [rotationKey, setRotationKey] = useState(0)
+	const isFirstVariantRender = useRef(true)
 
 	const selectedVariant = useMemo<StoreVariantSummary | null>(() => {
 		return product.variants.find((v) => v.id === variantId) ?? product.variant ?? product.variants[0] ?? null
 	}, [variantId, product.variants, product.variant])
 
-	const variantImages = selectedVariant?.images ?? ([] as StoreProductImage[])
-	const safeImageIndex = Math.max(0, Math.min(activeImageIndex, Math.max(0, variantImages.length - 1)))
-	const activeImage = variantImages[safeImageIndex] ?? {
+	// Galería: portada del modelo + una imagen por cada sabor, sin duplicados.
+	const galleryImages = useMemo<StoreProductImage[]>(() => {
+		const seen = new Set<string>()
+		const list: StoreProductImage[] = []
+		const push = (image: StoreProductImage | null) => {
+			if (!image?.src || seen.has(image.src)) return
+			seen.add(image.src)
+			list.push(image)
+		}
+
+		if (product.imageUrl) push({ src: product.imageUrl, alt: product.name, position: -1 })
+		for (const variant of product.variants) {
+			for (const image of variant.images) {
+				push({ ...image, alt: image.alt || variant.name || product.name })
+			}
+		}
+		if (list.length === 0) push({ src: '/itemhero.png', alt: product.name, position: 0 })
+
+		return list
+	}, [product])
+
+	const safeImageIndex = Math.max(0, Math.min(activeImageIndex, Math.max(0, galleryImages.length - 1)))
+	const activeImage = galleryImages[safeImageIndex] ?? {
 		src: '/itemhero.png',
 		alt: product.name,
 		position: 0,
@@ -81,9 +104,33 @@ export default function ProductDetail({ product }: ProductDetailProps) {
 	const isOutOfStock = (selectedVariant?.stockAvailable ?? 0) <= 0
 	const displayPrice = selectedVariant?.displayPrice ?? product.variant?.displayPrice ?? 0
 
+	const goToImage = (index: number) => {
+		setActiveImageIndex(index)
+		setRotationKey((key) => key + 1)
+	}
+
+	// Reproduce la galería automáticamente (se detiene mientras el mouse está encima).
 	useEffect(() => {
-		setActiveImageIndex(0)
-	}, [selectedVariant?.id])
+		if (galleryImages.length <= 1 || galleryPaused) return
+		const id = window.setInterval(() => {
+			setActiveImageIndex((index) => (index + 1) % galleryImages.length)
+		}, 4000)
+		return () => window.clearInterval(id)
+	}, [galleryImages.length, galleryPaused, rotationKey])
+
+	// Al cambiar de sabor, muestra la imagen de ese sabor y reinicia el ciclo.
+	useEffect(() => {
+		if (isFirstVariantRender.current) {
+			isFirstVariantRender.current = false
+			return
+		}
+		const target = selectedVariant?.images[0]?.src
+		if (!target) return
+		const index = galleryImages.findIndex((image) => image.src === target)
+		if (index < 0) return
+		setActiveImageIndex(index)
+		setRotationKey((key) => key + 1)
+	}, [selectedVariant, galleryImages])
 
 	const handleAddToCart = () => {
 		if (!selectedVariant) return
@@ -139,7 +186,11 @@ export default function ProductDetail({ product }: ProductDetailProps) {
 			<div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-14 xl:gap-20 items-start">
 				{/* COLUMNA IZQUIERDA — GALERÍA */}
 				<div className="space-y-5">
-					<div className="relative mx-auto aspect-square w-full rounded-[2rem] bg-[#dcd5ff] shadow-[0_18px_44px_rgba(31,42,155,0.14)] overflow-hidden">
+					<div
+						className="relative mx-auto aspect-square w-full rounded-[2rem] bg-[#dcd5ff] shadow-[0_18px_44px_rgba(31,42,155,0.14)] overflow-hidden"
+						onMouseEnter={() => setGalleryPaused(true)}
+						onMouseLeave={() => setGalleryPaused(false)}
+					>
 						<Image
 							src={activeImage.src}
 							alt={activeImage.alt || product.name}
@@ -150,14 +201,14 @@ export default function ProductDetail({ product }: ProductDetailProps) {
 						/>
 					</div>
 					{/* Thumbnails — lila */}
-					<div className="flex flex-wrap gap-5">
-						{(variantImages.length ? variantImages : [activeImage]).map((img, i) => (
+					<div className="flex flex-wrap gap-3">
+						{(galleryImages.length ? galleryImages : [activeImage]).map((img, i) => (
 							<button
 								key={`${img.src}-${i}`}
 								type="button"
-								onClick={() => setActiveImageIndex(i)}
-								className={`relative h-28 w-28 sm:h-32 sm:w-32 overflow-hidden rounded-2xl bg-[#dcd5ff] transition ${
-									i === safeImageIndex && variantImages.length > 1
+								onClick={() => goToImage(i)}
+								className={`relative h-16 w-16 sm:h-20 sm:w-20 overflow-hidden rounded-xl bg-[#dcd5ff] transition ${
+									i === safeImageIndex && galleryImages.length > 1
 										? 'ring-4 ring-[#1f2a9b]/30 shadow-[0_14px_26px_rgba(31,42,155,0.22)]'
 										: 'shadow-[0_10px_22px_rgba(31,42,155,0.12)] hover:ring-2 hover:ring-[#1f2a9b]/20'
 								}`}
@@ -167,7 +218,7 @@ export default function ProductDetail({ product }: ProductDetailProps) {
 									src={img.src}
 									alt={img.alt || `${product.name} ${i + 1}`}
 									fill
-									className="object-contain p-4"
+									className="object-contain p-2"
 								/>
 							</button>
 						))}
@@ -182,7 +233,7 @@ export default function ProductDetail({ product }: ProductDetailProps) {
 							{metaLabel}
 						</div>
 						<h1 className="mt-1 text-3xl sm:text-4xl lg:text-5xl font-black uppercase leading-none">
-							{product.name}
+							{[product.brandName, product.name].filter(Boolean).join(' ')}
 						</h1>
 					</div>
 
@@ -340,14 +391,6 @@ export default function ProductDetail({ product }: ProductDetailProps) {
 							</ul>
 						</div>
 					</div>
-
-					<Link
-						href="/tienda"
-						className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-slate-500 transition hover:text-[#1f2a9b]"
-					>
-						<ChevronLeft className="h-4 w-4" />
-						Volver a tienda
-					</Link>
 				</div>
 			</div>
 		</div>

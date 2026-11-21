@@ -152,7 +152,7 @@ export default function ComboCard({ combo }: ComboCardProps) {
 								type="button"
 								onClick={handleBuyNow}
 								disabled={isOutOfStock}
-								className={`inline-flex w-full items-center justify-center rounded-full px-5 py-3 text-sm font-black uppercase tracking-[0.15em] transition ${
+								className={`inline-flex w-full items-center justify-center rounded-full px-5 py-3 text-xs font-black uppercase tracking-[0.1em] transition ${
 									isOutOfStock
 										? 'cursor-not-allowed bg-slate-400 text-white/80'
 										: 'bg-[#1f2a9b] text-white hover:-translate-y-0.5 hover:shadow-[0_16px_28px_rgba(31,42,155,0.28)]'
@@ -165,7 +165,7 @@ export default function ComboCard({ combo }: ComboCardProps) {
 								type="button"
 								onClick={handleAddToCart}
 								disabled={isOutOfStock}
-								className={`inline-flex w-full items-center justify-center rounded-full border px-5 py-3 text-sm font-black uppercase tracking-[0.15em] transition ${
+								className={`inline-flex w-full items-center justify-center rounded-full border px-5 py-3 text-xs font-black uppercase tracking-[0.1em] transition ${
 									isOutOfStock
 										? 'cursor-not-allowed border-slate-300 bg-white/70 text-slate-400'
 										: 'border-[#1f2a9b] bg-white/70 text-[#1f2a9b] hover:-translate-y-0.5 hover:bg-white'

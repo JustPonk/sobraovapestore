@@ -55,6 +55,9 @@ export interface StoreProduct {
 	name: string
 	slug: string
 	description: string | null
+	imageUrl: string | null
+	imageSrc: string
+        compareAtPrice: number | null
 	categoryName: string | null
 	categorySlug: string | null
 	brandName: string | null
@@ -62,6 +65,8 @@ export interface StoreProduct {
 	tagNames: string[]
 	filterSlugs: string[]
 	metaLabel: string
+	isPromoted: boolean
+	promotionLabel: string
 	rating: number
 	reviewCount: number
 	stockAvailable: number
@@ -82,6 +87,10 @@ interface StoreRawProduct {
 	name: string
 	slug: string
 	description: string | null
+	image_url: string | null
+	compare_at_price: number | null
+	price_includes_igv: boolean
+	is_promoted: boolean
 	created_at: string | null
 	category: StoreRawCategory | StoreRawCategory[] | null
 	brand: StoreRawBrand | StoreRawBrand[] | null
@@ -281,11 +290,31 @@ function buildStoreProduct(product: StoreRawProduct): StoreProduct | null {
 	const metaLabel = (tagNames[0] || category?.name || 'Catalogo').toUpperCase()
 	const stockAvailable = variant.stockAvailable
 
+	const compareAtRaw =
+		product.compare_at_price != null ? toNumber(product.compare_at_price) : null
+	const compareAtPrice =
+		compareAtRaw != null
+			? product.price_includes_igv
+				? roundCurrency(compareAtRaw)
+				: roundCurrency(compareAtRaw * IGV_MULTIPLIER)
+			: null
+	const promotionLabel =
+		promotion?.badgeLabel ??
+		(compareAtPrice && compareAtPrice > variant.displayPrice && variant.displayPrice > 0
+			? `-${Math.round((1 - variant.displayPrice / compareAtPrice) * 100)}%`
+			: '')
+
+	const imageUrl = product.image_url ? resolveImageUrl(product.image_url) : null
+	const imageSrc = imageUrl ?? variant.images[0]?.src ?? '/itemhero.png'
+
 	return {
 		id: product.id,
 		name: product.name,
 		slug: product.slug,
 		description: product.description,
+		imageUrl,
+		imageSrc,
+                compareAtPrice,
 		categoryName: category?.name ?? null,
 		categorySlug: category?.slug ?? null,
 		brandName: brand?.name ?? null,
@@ -293,6 +322,8 @@ function buildStoreProduct(product: StoreRawProduct): StoreProduct | null {
 		tagNames,
 		filterSlugs,
 		metaLabel,
+		isPromoted: Boolean(product.is_promoted),
+		promotionLabel,
 		rating,
 		reviewCount,
 		stockAvailable,
@@ -315,6 +346,10 @@ export async function getStoreProducts() {
 				name,
 				slug,
 				description,
+				image_url,
+				compare_at_price,
+				price_includes_igv,
+				is_promoted,
 				created_at,
 				category:categories(name, slug),
 				brand:brands(name, slug),
@@ -361,6 +396,10 @@ export async function getStoreProductBySlug(slug: string): Promise<StoreProduct 
 				name,
 				slug,
 				description,
+				image_url,
+				compare_at_price,
+				price_includes_igv,
+				is_promoted,
 				created_at,
 				category:categories(name, slug),
 				brand:brands(name, slug),
@@ -394,6 +433,22 @@ export async function getStoreProductBySlug(slug: string): Promise<StoreProduct 
 
 	const raw = data as StoreRawProduct
 	return buildStoreProduct(raw)
+}
+
+export async function getRelatedProducts(current: StoreProduct, limit = 4): Promise<StoreProduct[]> {
+	const products = await getStoreProducts()
+	const others = products.filter((product) => product.id !== current.id)
+
+	const sameCategory = current.categorySlug
+		? others.filter((product) => product.categorySlug === current.categorySlug)
+		: []
+	const remaining = others.filter((product) => !sameCategory.includes(product))
+	const ranked = [...sameCategory, ...remaining]
+
+	const inStock = ranked.filter((product) => product.hasStock)
+	const outOfStock = ranked.filter((product) => !product.hasStock)
+
+	return [...inStock, ...outOfStock].slice(0, limit)
 }
 
 // ─── Combos ───────────────────────────────────────────────────────
@@ -620,4 +675,3 @@ export async function getStoreComboBySlug(slug: string): Promise<StoreCombo | nu
 	if (!data) return null
 	return buildStoreCombo(data as StoreRawCombo)
 }
-
