@@ -116,7 +116,7 @@ export default function ProductGrid({ products, combos, activeFilter, searchQuer
 	}, [activeFilter, activeFilterConfig.matchers, isSearching, products, combos, trimmedQuery])
 
         return (
-                <section className={`${storefrontFrameClass} space-y-7 pt-4 pb-10 sm:space-y-9 sm:pt-6 sm:pb-14`}>
+                <section className={`${storefrontFrameClass} space-y-7 pt-0 pb-10 sm:space-y-9 sm:pt-6 sm:pb-14`}>
 			{isSearching ? null : <FilterTabs activeFilter={activeFilter} />}
 
 			<div className={storefrontSectionTitleWrapClass}>

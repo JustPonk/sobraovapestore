@@ -25,7 +25,7 @@ export default async function TiendaPage({ searchParams }: TiendaPageProps) {
 				<Navbar />
 			</div>
 
-                        <main className="pt-20 sm:pt-24">
+			<main className="pt-16 sm:pt-24">
 				<section className="w-full bg-[url('/BGContent.png')] bg-cover bg-center bg-no-repeat">
 					<Store
 						activeFilterParam={resolvedSearchParams?.filter}

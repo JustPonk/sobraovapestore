@@ -33,9 +33,9 @@ export const heroContentLayout = {
     
     // Botones CTA
     primaryButton:
-        'inline-flex w-[88%] self-center items-center justify-center rounded-[6px] bg-[#DEDCFF] px-5 py-3 text-[1.35rem] uppercase leading-none !text-[#2B1F97] shadow-[0_14px_34px_rgba(255,255,255,0.14)] transition hover:-translate-y-0.5 lg:min-w-[198px] lg:w-auto lg:rounded-[10px] lg:px-7 lg:py-4 lg:text-[1.75rem] [font-family:var(--font-thunder)]',
+        'inline-flex w-[76%] self-center items-center justify-center rounded-[6px] bg-[#DEDCFF] px-5 py-3 text-[1.35rem] uppercase leading-none !text-[#2B1F97] shadow-[0_14px_34px_rgba(255,255,255,0.14)] transition hover:-translate-y-0.5 lg:min-w-[198px] lg:w-auto lg:rounded-[10px] lg:px-7 lg:py-4 lg:text-[1.75rem] [font-family:var(--font-thunder)]',
     secondaryButton:
-        'inline-flex w-[88%] self-center items-center justify-center rounded-[6px] bg-white px-5 py-3 text-[1.35rem] uppercase leading-none !text-[#2B1F97] shadow-[0_18px_36px_rgba(43,31,151,0.4)] transition hover:-translate-y-0.5 hover:bg-white/90 lg:min-w-[198px] lg:w-auto lg:rounded-[10px] lg:bg-[#2B1F97] lg:px-7 lg:py-4 lg:text-[1.75rem] lg:!text-[#DEDCFF] lg:hover:bg-[#3a2cb9] [font-family:var(--font-thunder)]',
+        'inline-flex w-[76%] self-center items-center justify-center rounded-[6px] bg-white px-5 py-3 text-[1.35rem] uppercase leading-none !text-[#2B1F97] shadow-[0_18px_36px_rgba(43,31,151,0.4)] transition hover:-translate-y-0.5 hover:bg-white/90 lg:min-w-[198px] lg:w-auto lg:rounded-[10px] lg:bg-[#2B1F97] lg:px-7 lg:py-4 lg:text-[1.75rem] lg:!text-[#DEDCFF] lg:hover:bg-[#3a2cb9] [font-family:var(--font-thunder)]',
     
     // Banda inferior de beneficios
     highlightsGrid: 'hidden grid-cols-1 gap-3 pt-4 text-white lg:grid lg:pt-6 xl:grid-cols-4',

@@ -17,7 +17,7 @@ export default function SobraoMessage() {
 			    the banner shape in the mockup. No rounded corners / shadow here on
 			    purpose — a full-bleed banner reads as part of the page, not as a
 			    card floating inside it. */}
-			<div className="relative w-full overflow-hidden aspect-square sm:aspect-[16/10] md:aspect-[16/7] lg:aspect-[21/8]">
+			<div className="relative w-full overflow-hidden aspect-[3/2] sm:aspect-[16/10] md:aspect-[16/7] lg:aspect-[21/8]">
 				<Image
 					src="/humoSobrao.png"
 					alt="Sobrao Vape Store"

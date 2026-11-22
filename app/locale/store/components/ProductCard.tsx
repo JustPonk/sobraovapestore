@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
+import { Plus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { upsertCartItem } from '../cartStorage'
@@ -46,6 +47,7 @@ export default function ProductCard({ product }: ProductCardProps) {
 
 	const { src: imageSrc, alt: imageAlt } = getVariantFallbackImage(activeVariant, product.imageSrc)
 	const displayPrice = activeVariant?.displayPrice ?? product.variant?.displayPrice ?? 0
+	const previousPrice = product.compareAtPrice && product.compareAtPrice > displayPrice ? product.compareAtPrice : null
 
 	function startRotation() {
 		if (variants.length <= 1) return
@@ -122,7 +124,7 @@ export default function ProductCard({ product }: ProductCardProps) {
 
 				<Link
 					href={`/producto/${encodeURIComponent(product.slug)}`}
-					className="relative flex flex-1 items-center justify-center bg-white/55 border-b border-white/40 backdrop-blur-[2px] pt-10 pb-6 px-4 min-h-[280px] transition focus:outline-none focus:ring-4 focus:ring-[#1f2a9b]/15"
+					className="relative flex flex-1 items-center justify-center bg-white/55 border-b border-white/40 px-4 pb-3 pt-6 backdrop-blur-[2px] transition focus:outline-none focus:ring-4 focus:ring-[#1f2a9b]/15 sm:min-h-[280px] sm:pb-6 sm:pt-10"
 					aria-label={`Ver detalles de ${product.name}`}
 				>
 					<Image
@@ -147,7 +149,49 @@ export default function ProductCard({ product }: ProductCardProps) {
 					) : null}
 				</Link>
 
-				<div className="flex flex-col gap-3 p-4 sm:p-5">
+				<div className="p-0 sm:p-5">
+					<div className="sm:hidden">
+						<div className="border-t border-white/50 bg-[#f3efff]/75 transition">
+							<Link
+								href={`/producto/${encodeURIComponent(product.slug)}`}
+								className="block px-3 pt-3 transition hover:bg-[#efeaff]"
+							>
+							<h3 className="min-w-0 break-words text-base font-black uppercase leading-tight text-[#121212] [font-family:var(--font-thunder)]">
+								{[product.brandName, product.name].filter(Boolean).join(' ')}
+							</h3>
+							</Link>
+							<div className="mt-3 flex items-end justify-between gap-3 px-3 pb-3">
+								<button
+									type="button"
+									onClick={(event) => {
+										event.preventDefault()
+										handleAddToCart()
+									}}
+									disabled={isOutOfStock}
+									aria-label={`Añadir ${product.name} al carrito`}
+									className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition ${
+										isOutOfStock
+											? 'cursor-not-allowed bg-slate-400 text-white/80'
+											: 'bg-[#1f2a9b] text-white hover:scale-105 hover:shadow-[0_10px_18px_rgba(31,42,155,0.28)]'
+									}`}
+								>
+									<Plus className="h-5 w-5" strokeWidth={3} />
+								</button>
+								<div className="min-w-0 text-right tabular-nums">
+									{previousPrice ? (
+										<span className="block text-xs font-semibold text-slate-400 line-through">
+											{formatPen(previousPrice)}
+										</span>
+									) : null}
+									<span className="block text-lg font-black leading-none text-[#1f2a9b]">
+										{formatPen(displayPrice)}
+									</span>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div className="hidden flex-col gap-3 sm:flex">
 					<Link
 						href={`/producto/${encodeURIComponent(product.slug)}`}
 						className="block rounded-[1.3rem] bg-[#f3efff]/75 border border-white/50 px-4 py-3 space-y-3 transition hover:bg-[#efeaff]"
@@ -190,6 +234,7 @@ export default function ProductCard({ product }: ProductCardProps) {
 								{isAdded ? 'Añadido' : 'Añadir al carrito'}
 							</button>
 						</div>
+					</div>
 					</div>
 				</div>
 			</article>
