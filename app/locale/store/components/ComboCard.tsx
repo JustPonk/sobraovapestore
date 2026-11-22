@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { Package } from 'lucide-react'
+import { Package, Plus } from 'lucide-react'
 
 import type { StoreCombo } from '../data'
 import { addComboToCart } from '../cartStorage'
@@ -77,7 +77,7 @@ export default function ComboCard({ combo }: ComboCardProps) {
 		<div className="relative h-full w-full">
 			{combo.savings > 0 ? <PromotionBadge label={`-${discountPct}%`} /> : null}
 
-			<article className="group relative flex h-full w-full flex-col overflow-hidden rounded-[1.8rem] bg-gradient-to-br from-[#fff5e6]/90 to-[#ffe6c7]/90 shadow-[0_18px_34px_rgba(31,42,155,0.12)] transition">
+			<article className="group relative flex h-full w-full flex-col overflow-hidden rounded-[1.8rem] bg-gradient-to-br from-[#ece7ff]/90 to-[#d8d3ff]/90 shadow-[0_18px_34px_rgba(31,42,155,0.12)] transition sm:from-[#fff5e6]/90 sm:to-[#ffe6c7]/90">
 				{isOutOfStock ? (
 					<span className="absolute left-4 top-4 z-20 inline-flex rounded-full bg-white px-3 py-2 text-[0.65rem] font-black uppercase tracking-[0.16em] text-[#1f2a9b] shadow-[0_10px_20px_rgba(31,42,155,0.08)]">
 						Sin stock
@@ -86,20 +86,56 @@ export default function ComboCard({ combo }: ComboCardProps) {
 
 				<Link
 					href={detailHref}
-					className="relative flex flex-1 items-center justify-center bg-white/55 border-b border-white/40 backdrop-blur-[2px] pt-10 pb-6 px-4 min-h-[200px] transition focus:outline-none focus:ring-4 focus:ring-[#1f2a9b]/15"
+					className="relative flex flex-1 items-center justify-center border-b border-white/40 bg-white/55 px-4 pb-3 pt-6 backdrop-blur-[2px] transition focus:outline-none focus:ring-4 focus:ring-[#1f2a9b]/15 sm:min-h-[200px] sm:pb-6 sm:pt-10"
 					aria-label={`Ver detalles de ${combo.name}`}
 				>
 					<Image
 						src={combo.imageUrl}
 						alt={combo.name}
-						width={200}
-						height={200}
-						className="h-auto max-h-[200px] w-auto object-contain transition duration-300 ease-out group-hover:scale-[1.04]"
-						sizes="(max-width: 768px) 200px, 240px"
+						width={240}
+						height={240}
+						className="h-auto max-h-[240px] w-auto object-contain transition duration-300 ease-out group-hover:scale-[1.04] sm:max-h-[200px]"
+						sizes="(max-width: 768px) 240px, 200px"
 					/>
 				</Link>
 
-				<div className="flex flex-col gap-3 p-4 sm:p-5">
+				<div className="p-0 sm:p-5">
+					<div className="sm:hidden">
+						<div className="border-t border-white/50 bg-[#f3efff]/75">
+							<Link href={detailHref} className="block px-3 pt-3 transition hover:bg-[#efeaff]">
+								<h3 className="min-w-0 break-words text-base font-black uppercase leading-tight text-[#121212] [font-family:var(--font-thunder)]">
+									{[combo.brandName, combo.name].filter(Boolean).join(' ')}
+								</h3>
+							</Link>
+							<div className="mt-3 flex items-end justify-between gap-3 px-3 pb-3">
+								<button
+									type="button"
+									onClick={handleAddToCart}
+									disabled={isOutOfStock}
+									aria-label={`Añadir ${combo.name} al carrito`}
+									className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition ${
+										isOutOfStock
+											? 'cursor-not-allowed bg-slate-400 text-white/80'
+											: 'bg-[#1f2a9b] text-white hover:scale-105 hover:shadow-[0_10px_18px_rgba(31,42,155,0.28)]'
+									}`}
+								>
+									<Plus className="h-5 w-5" strokeWidth={3} />
+								</button>
+								<div className="min-w-0 text-right tabular-nums">
+									{combo.savings > 0 ? (
+										<span className="block text-xs font-semibold text-slate-400 line-through">
+											{formatPen(combo.componentTotal)}
+										</span>
+									) : null}
+									<span className="block text-lg font-black leading-none text-[#1f2a9b]">
+										{formatPen(combo.displayPrice)}
+									</span>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div className="hidden flex-col gap-3 sm:flex">
 					<Link
 						href={detailHref}
 						className="block rounded-[1.3rem] bg-[#fff8ed]/75 border border-white/50 px-4 py-3 space-y-2 transition hover:bg-[#fff3e0]"
@@ -174,6 +210,7 @@ export default function ComboCard({ combo }: ComboCardProps) {
 								{isAdded ? 'Añadido' : 'Añadir al carrito'}
 							</button>
 						</div>
+					</div>
 					</div>
 				</div>
 			</article>

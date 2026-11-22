@@ -131,7 +131,7 @@ export default function ProductGrid({ products, combos, activeFilter, searchQuer
 			</div>
 
 			{filteredItems.length ? (
-				<div className="mx-auto grid w-full max-w-[80rem] grid-cols-2 gap-x-3 gap-y-8 px-2 sm:gap-x-5 sm:gap-y-12 sm:px-0 md:grid-cols-3 md:gap-x-6 md:gap-y-14 justify-items-center">
+				<div className="mx-auto grid w-full max-w-[80rem] grid-cols-2 gap-x-3 gap-y-10 px-2 sm:gap-x-5 sm:gap-y-12 sm:px-0 md:grid-cols-3 md:gap-x-6 md:gap-y-14 justify-items-center">
 					{filteredItems.map((item) => (
 						<div key={`${item.type}-${item.data.id}`} className="w-full max-w-[24rem]">
 							{item.type === 'product' ? (
