@@ -60,7 +60,7 @@ async function getPromotionCarouselItems(): Promise<PromoCarouselItem[]> {
                         imageSrc: item.imageSrc,
                         originalPrice,
                         currentPrice,
-                        discountBadgeSrc: '/icons/ICONO-OFERTA.png',
+						discountBadgeSrc: '/icons/iconpromo-mainpage.png',
                         discountLabel: item.promotionLabel || undefined,
                         href: `/producto/${encodeURIComponent(item.slug)}`,
                 }))

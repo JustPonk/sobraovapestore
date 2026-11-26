@@ -41,7 +41,11 @@ function buildLoopedItems(items: PromoCarouselItem[]) {
 
 function PromoCard({ item, isActive }: { item: PromoCarouselItem; isActive: boolean }) {
 	return (
-                <div className="relative flex min-h-[350px] w-full flex-col rounded-[1.75rem] bg-[#0A0926] px-5 pb-5 pt-4 text-white sm:px-6 sm:pb-6 sm:pt-5 lg:min-h-[460px] lg:px-7 lg:pb-7 lg:pt-5">
+		<div
+			className={`relative flex min-h-[350px] w-full flex-col rounded-[1.75rem] bg-[#FF4F79] px-5 pb-5 pt-4 text-white sm:px-6 sm:pb-6 sm:pt-5 lg:px-7 lg:pb-7 lg:pt-5 ${
+				isActive ? 'lg:min-h-[440px]' : 'lg:min-h-[390px]'
+			}`}
+		>
 			<div className="absolute -right-6 -top-9 h-20 w-20 sm:-right-7 sm:-top-10 sm:h-24 sm:w-24 lg:-right-8 lg:-top-11 lg:h-28 lg:w-28">
                                 <Image src={item.discountBadgeSrc} alt="Descuento" fill className="object-contain" />
 				<span className="absolute inset-0 flex items-center justify-center pb-1 text-[0.7rem] font-black text-[#1f2a9b] sm:text-sm lg:text-base">
@@ -156,13 +160,19 @@ function MobilePromotionsCarousel({ items }: { items: PromoCarouselItem[] }) {
 export default function PromotionsCarousel({ items, prevArrowSrc, nextArrowSrc }: PromotionsCarouselProps) {
 	const loopedItems = buildLoopedItems(items)
 	const [index, setIndex] = useState(() => Math.floor(loopedItems.length / 2))
+	const [previousIndex, setPreviousIndex] = useState<number | null>(null)
 
 	if (loopedItems.length === 0) return null
 
 	const goTo = (direction: 'prev' | 'next') => {
 		setIndex((current) => {
 			const next = direction === 'next' ? current + 1 : current - 1
-			return Math.min(Math.max(next, VISIBLE_RADIUS), loopedItems.length - 1 - VISIBLE_RADIUS)
+			const nextIndex = Math.min(Math.max(next, VISIBLE_RADIUS), loopedItems.length - 1 - VISIBLE_RADIUS)
+			if (nextIndex === current) return current
+
+			setPreviousIndex(current)
+
+			return nextIndex
 		})
 	}
 
@@ -207,8 +217,10 @@ export default function PromotionsCarousel({ items, prevArrowSrc, nextArrowSrc }
 				<div className="relative h-full w-full">
 					{windowSlots.map(({ position, offset, item }) => {
 						const isActive = offset === 0
-                                                const scale = isActive ? 1.22 : 0.82
-						const zIndex = isActive ? 10 : 5
+						const scale = isActive ? 1.18 : 0.82
+						// La tarjeta que deja el centro se mantiene al frente hasta que la
+						// siguiente llega a su posición; así la entrante recorre el fondo.
+						const zIndex = previousIndex === null ? (isActive ? 10 : 5) : position === previousIndex ? 10 : 5
 
 						return (
 							<motion.div
@@ -221,6 +233,9 @@ export default function PromotionsCarousel({ items, prevArrowSrc, nextArrowSrc }
 									scale,
 								}}
 								transition={{ type: 'spring', stiffness: 220, damping: 34, mass: 0.9 }}
+								onAnimationComplete={() => {
+									if (isActive) setPreviousIndex(null)
+								}}
 							>
 								<PromoCard item={item} isActive={isActive} />
 							</motion.div>
