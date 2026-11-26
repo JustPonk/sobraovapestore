@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import Footer from '@/app/components/footer/footer'
 import Navbar from '@/app/components/navbar/navbar'
 import Store from '@/app/locale/store/store'
+import StoreScrollTop from './StoreScrollTop'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -21,11 +22,12 @@ export default async function TiendaPage({ searchParams }: TiendaPageProps) {
 
 	return (
 		<div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(143,104,255,0.16),transparent_28%),linear-gradient(180deg,#f9f8ff_0%,#f5f3ff_40%,#ffffff_100%)] text-slate-900">
+			<StoreScrollTop />
 			<div className="fixed inset-x-0 top-0 z-[60]">
 				<Navbar />
 			</div>
 
-			<main className="pt-16 sm:pt-24">
+			<main className="pt-32 sm:pt-40">
 				<section className="w-full bg-[url('/BGContent.png')] bg-cover bg-center bg-no-repeat">
 					<Store
 						activeFilterParam={resolvedSearchParams?.filter}
