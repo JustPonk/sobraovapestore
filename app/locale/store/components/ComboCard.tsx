@@ -182,7 +182,7 @@ export default function ComboCard({ combo }: ComboCardProps) {
 						)}
 					</div>
 
-					<div className="rounded-[1.3rem] bg-[#ffe8c7]/60 border border-white/45 px-4 py-3">
+					<div className="rounded-[1.3rem] px-4 py-3">
 						<div className="flex flex-col gap-2">
 							<button
 								type="button"

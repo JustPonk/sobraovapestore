@@ -18,7 +18,7 @@ export default function PromotionBadge({ label }: { label: string }) {
 				src="/icons/ICONO-OFERTA.png"
 				alt="Descuento"
 				fill
-				className="object-contain drop-shadow-[0_12px_24px_rgba(31,42,155,0.22)]"
+				className="object-contain"
 			/>
 			<span className="absolute inset-0 flex items-center justify-center pb-1 text-[0.7rem] font-black text-[#1f2a9b] sm:text-sm lg:text-base">
 				{label}

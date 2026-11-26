@@ -4,7 +4,13 @@ import { createAdminClient } from '@/utils/supabase/admin'
 
 const IGV_MULTIPLIER = 1.18
 
-export type StoreFilterKey = 'promociones' | 'nuevo' | 'vapor-ti' | 'desechables' | 'equipos'
+export type StoreFilterKey =
+	| 'promociones'
+	| 'desechables'
+	| 'equipos'
+	| 'dispositivos'
+	| 'merchandising'
+	| 'tips-sobrao'
 
 export interface StoreProductImage {
 	src: string

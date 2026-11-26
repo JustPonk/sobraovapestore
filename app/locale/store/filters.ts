@@ -6,10 +6,11 @@ export const storeFilters: Array<{
 	matchers: string[]
 }> = [
 	{ key: 'promociones', label: 'Promociones', matchers: ['promociones'] },
-	{ key: 'nuevo', label: 'Nuevo', matchers: ['nuevo'] },
-	{ key: 'vapor-ti', label: 'Vapor ti', matchers: ['vapor-ti', 'vapor-tienda', 'vapor-ti'] },
 	{ key: 'desechables', label: 'Desechables', matchers: ['desechables', 'desechable'] },
-	{ key: 'equipos', label: 'Equipos', matchers: ['equipos', 'equipo'] },
+	{ key: 'equipos', label: 'Pods', matchers: ['equipos', 'equipo', 'pods', 'pod'] },
+	{ key: 'dispositivos', label: 'Dispositivos', matchers: ['dispositivos', 'dispositivo', 'recargables', 'recargable'] },
+	{ key: 'merchandising', label: 'Merchandising', matchers: ['merchandising', 'merch'] },
+	{ key: 'tips-sobrao', label: 'Tips Sobrao', matchers: ['tips-sobrao', 'tips', 'sobrao'] },
 ]
 
 export const defaultStoreFilter: StoreFilterKey = 'promociones'

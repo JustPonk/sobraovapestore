@@ -47,3 +47,19 @@ a {
   background: rgba(31, 42, 155, 0.18);
   color: #111827;
 }
+
+@keyframes subnav-category-label-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1.04);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.04);
+  }
+}
+
+@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+  .subnav-category-button:hover .subnav-category-label {
+    animation: subnav-category-label-float 1.5s ease-in-out infinite;
+  }
+}

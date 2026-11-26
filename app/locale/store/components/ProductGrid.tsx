@@ -10,9 +10,9 @@ import {
 	storefrontSectionTitleClass,
 	storefrontSectionTitleWrapClass,
 } from '../storeStyles'
-import FilterTabs from './FilterTabs'
 import ProductCard from './ProductCard'
 import ComboCard from './ComboCard'
+import StoreCategorySubnav from './StoreCategorySubnav'
 
 type CatalogItem =
 	| { type: 'product'; data: StoreProduct }
@@ -57,21 +57,7 @@ function matchFilter(item: CatalogItem, activeFilter: StoreFilterKey, matchers: 
 	if (item.type === 'product') {
 		const product = item.data
 		if (activeFilter === 'promociones') {
-			const hasPromotion = Boolean(product.promotion)
-			const inPromotionsCategory = product.categorySlug === 'promociones'
-			const hasPromotionInSlugs = product.filterSlugs.includes('promociones')
-			return product.isPromoted || hasPromotion || inPromotionsCategory || hasPromotionInSlugs
-		}
-		if (activeFilter === 'nuevo') {
-			const inNuevoCategory =
-				product.categorySlug === 'nuevo' || product.filterSlugs.includes('nuevo')
-			let withinSevenDays = false
-			if (product.createdAt) {
-				const diff = Date.now() - new Date(product.createdAt).getTime()
-				withinSevenDays = Number.isFinite(diff) && diff >= 0 && diff <= 1000 * 60 * 60 * 24 * 7
-			}
-			if (inNuevoCategory || withinSevenDays) return true
-			return matchers.some((matcher) => product.filterSlugs.includes(matcher))
+			return product.isPromoted
 		}
 		return matchers.some((matcher) => product.filterSlugs.includes(matcher))
 	}
@@ -80,9 +66,6 @@ function matchFilter(item: CatalogItem, activeFilter: StoreFilterKey, matchers: 
 	const combo = item.data
 	if (activeFilter === 'promociones') {
 		return combo.categorySlug === 'promociones' || combo.filterSlugs.includes('promociones')
-	}
-	if (activeFilter === 'nuevo') {
-		return combo.categorySlug === 'nuevo' || combo.filterSlugs.includes('nuevo')
 	}
 	return matchers.some((matcher) => combo.filterSlugs.includes(matcher))
 }
@@ -117,7 +100,7 @@ export default function ProductGrid({ products, combos, activeFilter, searchQuer
 
         return (
                 <section className={`${storefrontFrameClass} space-y-7 pt-0 pb-10 sm:space-y-9 sm:pt-6 sm:pb-14`}>
-			{isSearching ? null : <FilterTabs activeFilter={activeFilter} />}
+			{isSearching ? null : <StoreCategorySubnav activeFilter={activeFilter} />}
 
 			<div className={storefrontSectionTitleWrapClass}>
 				<p className={storefrontSectionEyebrowClass}>
@@ -131,7 +114,7 @@ export default function ProductGrid({ products, combos, activeFilter, searchQuer
 			</div>
 
 			{filteredItems.length ? (
-				<div className="mx-auto grid w-full max-w-[80rem] grid-cols-2 gap-x-3 gap-y-10 px-2 sm:gap-x-5 sm:gap-y-12 sm:px-0 md:grid-cols-3 md:gap-x-6 md:gap-y-14 justify-items-center">
+				<div className="mx-auto mt-5 grid w-full max-w-[80rem] grid-cols-2 justify-items-center gap-x-3 gap-y-10 px-2 sm:mt-7 sm:gap-x-5 sm:gap-y-12 sm:px-0 md:grid-cols-3 md:gap-x-6 md:gap-y-14">
 					{filteredItems.map((item) => (
 						<div key={`${item.type}-${item.data.id}`} className="w-full max-w-[24rem]">
 							{item.type === 'product' ? (

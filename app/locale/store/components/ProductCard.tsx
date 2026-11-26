@@ -96,12 +96,7 @@ export default function ProductCard({ product }: ProductCardProps) {
 		router.push(`/carrito?buyNow=${variantToAdd.id}`)
 	}
 
-	const isPromoCard = Boolean(
-		product.isPromoted ||
-			product.promotion ||
-			product.categorySlug === 'promociones' ||
-			product.filterSlugs.includes('promociones')
-	)
+	const isPromoCard = product.isPromoted
 
 	if (!product.variant && !variants.length) {
 		return null
@@ -206,7 +201,7 @@ export default function ProductCard({ product }: ProductCardProps) {
 						</div>
 					</Link>
 
-					<div className="rounded-[1.3rem] bg-[#e9e1ff]/60 border border-white/45 px-4 py-3">
+					<div className="rounded-[1.3rem] px-4 py-3">
 						<div className="flex flex-col gap-2">
 							<button
 								type="button"

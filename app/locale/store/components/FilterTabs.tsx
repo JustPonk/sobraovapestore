@@ -1,6 +1,6 @@
 'use client'
 
-import { Cigarette, HeartPulse, Sparkles, Star, Zap } from 'lucide-react'
+import { BatteryCharging, Cigarette, Info, Package, Sparkles, Star } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef } from 'react'
 
@@ -9,10 +9,11 @@ import { storeFilters } from '../filters'
 
 const iconMap = {
 	promociones: Star,
-	nuevo: Zap,
-	'vapor-ti': HeartPulse,
 	desechables: Cigarette,
 	equipos: Sparkles,
+	dispositivos: BatteryCharging,
+	merchandising: Package,
+	'tips-sobrao': Info,
 } as const
 
 interface FilterTabsProps {
